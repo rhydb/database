@@ -13,6 +13,7 @@ struct Token {
     Semicolon,
     Bang,
     Equals,
+    DoubleEquals,
     BangEquals,
     LessThan,
     LessThanEqual,
@@ -23,7 +24,7 @@ struct Token {
     Unexpected,
   };
 
-
+  Token() noexcept : mKind(Token::Kind::End), mLexeme() {}
   Token(Kind kind, const char *start, std::size_t len) noexcept : mKind(kind), mLexeme(start, len) {}
   Token(Kind kind, const char *start, const char *end) noexcept : mKind(kind), mLexeme(start, end - start) {}
 

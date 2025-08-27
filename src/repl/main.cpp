@@ -19,5 +19,13 @@ int main() {
     {
       break;
     }
+
+    Lexer lex = Lexer(input.c_str());
+
+    Token token = Token();
+    while (!(token = lex.next()).isOneOf(Token::Kind::End, Token::Kind::Unexpected))
+    {
+      std::cout << token.kind() << ":" << token.lexeme() << std::endl;
+    }
   }
 }

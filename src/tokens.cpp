@@ -14,6 +14,7 @@ static const char* kindToString(Token::Kind kind)
     case Token::Kind::String: return "String";
     case Token::Kind::Bang: return "Bang";
     case Token::Kind::Equals: return "Equals";
+    case Token::Kind::DoubleEquals: return "DoubleEquals";
     case Token::Kind::BangEquals: return "BangEquals";
     case Token::Kind::LessThan: return "LessThan";
     case Token::Kind::LessThanEqual: return "LessThanEqual";
@@ -91,7 +92,7 @@ Token Lexer::next() noexcept
     switch (c)
     {
     case '=':
-      return charToken(Token::Kind::Equals);
+      return matchOr(Token::Kind::Equals, '=', Token::Kind::DoubleEquals);
     case '!':
       return matchOr(Token::Kind::Bang, '=', Token::Kind::BangEquals);
     case '<':
