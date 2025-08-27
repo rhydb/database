@@ -1,28 +1,33 @@
 #include "tokens.hpp"
 #include <tuple>
 
+static const char* kindToString(Token::Kind kind)
+{
+  switch (kind)
+  {
+    case Token::Kind::Identifier: return "Identifier";
+    case Token::Kind::Number: return "Number";
+    case Token::Kind::OpenParen: return "OpenParen";
+    case Token::Kind::CloseParen: return "CloseParen";
+    case Token::Kind::Comma: return "Comma";
+    case Token::Kind::Semicolon: return "Semicolon";
+    case Token::Kind::String: return "String";
+    case Token::Kind::Bang: return "Bang";
+    case Token::Kind::Equals: return "Equals";
+    case Token::Kind::BangEquals: return "BangEquals";
+    case Token::Kind::LessThan: return "LessThan";
+    case Token::Kind::LessThanEqual: return "LessThanEqual";
+    case Token::Kind::GreaterThan: return "GreaterThan";
+    case Token::Kind::GreaterThanEqual: return "GreaterThanEqual";
+    case Token::Kind::End: return "End";
+    case Token::Kind::Unexpected: return "Unexpected";
+  };
+  return "Unknown";
+}
+
 std::ostream &operator<<(std::ostream &os, const Token::Kind &kind)
 {
-  static const char *const names[]{
-      [static_cast<int>(Token::Kind::Identifier)] = "Identifier",
-      [static_cast<int>(Token::Kind::Number)] = "Number",
-      [static_cast<int>(Token::Kind::OpenParen)] = "OpenParen",
-      [static_cast<int>(Token::Kind::CloseParen)] = "CloseParen",
-      [static_cast<int>(Token::Kind::Comma)] = "Comma",
-      [static_cast<int>(Token::Kind::Semicolon)] = "Semicolon",
-      [static_cast<int>(Token::Kind::SingleQuote)] = "SingleQuote",
-      [static_cast<int>(Token::Kind::DoubleQuote)] = "DoubleQuote",
-      [static_cast<int>(Token::Kind::Bang)] = "Bang",
-      [static_cast<int>(Token::Kind::Equals)] = "Equals",
-      [static_cast<int>(Token::Kind::BangEquals)] = "BangEquals",
-      [static_cast<int>(Token::Kind::LessThan)] = "LessThan",
-      [static_cast<int>(Token::Kind::LessThanEqual)] = "LessThanEqual",
-      [static_cast<int>(Token::Kind::GreaterThan)] = "GreaterThan",
-      [static_cast<int>(Token::Kind::GreaterThanEqual)] = "GreaterThanEqual",
-      [static_cast<int>(Token::Kind::End)] = "End",
-      [static_cast<int>(Token::Kind::Unexpected)] = "Unexpected",
-  };
-  return os << names[static_cast<int>(kind)];
+  return os << kindToString(kind);
 }
 
 enum class CharacterKind
@@ -48,7 +53,7 @@ static CharacterKind classifyChar(char c)
       {CharacterKind::Puncutation, '{', '}'},
   };
 
-  for (int i = 0; i < (sizeof(ranges) / sizeof(ranges[0])); i++)
+  for (std::size_t i = 0; i < (sizeof(ranges) / sizeof(ranges[0])); i++)
   {
     if (c >= std::get<1>(ranges[i]) && c <= std::get<2>(ranges[i]))
     {
@@ -72,6 +77,8 @@ Token Lexer::next() noexcept
     Number,
     Decimal,
     Identifier,
+    SingleQuoteString,
+    DoubleQuoteString,
     Unknown,
   } where = Unknown;
 
@@ -99,14 +106,21 @@ Token Lexer::next() noexcept
     case ',':
       return charToken(Token::Kind::Comma);
     case '\'':
-      return charToken(Token::Kind::SingleQuote);
+      // dont include the quote in the token. also starts loop inside string
+      ++mStart;
+      where = SingleQuoteString;
+      break;
     case '"':
-      return charToken(Token::Kind::DoubleQuote);
+      // dont include the quote in the token. also starts loop inside string
+      ++mStart;
+      where = DoubleQuoteString;
+      break;
     case ';':
       return charToken(Token::Kind::Semicolon);
     default:
       return charToken(Token::Kind::Unexpected);
     }
+    break;
   case CharacterKind::Alphabetical:
     where = Identifier;
     break;
@@ -119,6 +133,7 @@ Token Lexer::next() noexcept
 
   const char *tokenStart = mStart;
   CharacterKind kind;
+  bool escapeNext = false;
 
   while (true)
   {
@@ -132,7 +147,7 @@ Token Lexer::next() noexcept
 
     switch (where)
     {
-    case Decimal: /* fallthrough */
+    case Decimal: [[fallthrough]];
     case Number:
       // only allow going from a number to a decimal
       switch (kind)
@@ -159,7 +174,7 @@ Token Lexer::next() noexcept
     case Identifier:
       switch (kind)
       {
-      case CharacterKind::Alphabetical: /* fallthrough */
+      case CharacterKind::Alphabetical: [[fallthrough]];
       case CharacterKind::Numeric:
         break;
       case CharacterKind::Puncutation:
@@ -170,6 +185,19 @@ Token Lexer::next() noexcept
         }
         goto done;
       default:
+        goto done;
+      }
+      break;
+    case SingleQuoteString:
+      // TODO: remove the backslash
+      if (isNonEscaped(c, '\'', escapeNext))
+      {
+        goto done;
+      }
+      break;
+    case DoubleQuoteString:
+      if (isNonEscaped(c, '"', escapeNext))
+      {
         goto done;
       }
       break;
@@ -189,15 +217,20 @@ done:
   Token::Kind tokenKind;
   switch (where)
   {
+  case DoubleQuoteString: [[fallthrough]];
+  case SingleQuoteString:
+    return Token(Token::Kind::String, tokenStart, mStart++); // consume the end quote
+    break;
   case Identifier:
     tokenKind = Token::Kind::Identifier;
     break;
-  case Number:
+  case Number: [[fallthrough]];
   case Decimal:
     tokenKind = Token::Kind::Number;
     break;
   case Unknown:
     tokenKind = Token::Kind::Unexpected;
+    break;
   }
   return Token(tokenKind, tokenStart, mStart);
 }
@@ -221,4 +254,26 @@ Token Lexer::matchOr(Token::Kind fallback, char match,
   }
 
   return Token(fallback, tokenStart, 1);
+}
+
+bool Lexer::isNonEscaped(char c, char end, bool &escapeNext) const noexcept
+{
+  if (escapeNext)
+  {
+    escapeNext = false;
+    return false;
+  }
+
+  if (c == '\\')
+  {
+    escapeNext = true;
+    return false;
+  }
+
+  if (c == end)
+  {
+    return true;
+  }
+
+  return false;
 }

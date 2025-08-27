@@ -11,8 +11,6 @@ struct Token {
     CloseParen,
     Comma,
     Semicolon,
-    SingleQuote,
-    DoubleQuote,
     Bang,
     Equals,
     BangEquals,
@@ -20,6 +18,7 @@ struct Token {
     LessThanEqual,
     GreaterThan,
     GreaterThanEqual,
+    String,
     End,
     Unexpected,
   };
@@ -61,6 +60,7 @@ private:
 
   Token matchOr(Token::Kind fallback, char match, Token::Kind onMatch) noexcept;
 
+  bool isNonEscaped(char c, char end, bool& escapeNext) const noexcept;
   bool isWhiteSpace(char c) const noexcept;
   const char *mStart; 
 
