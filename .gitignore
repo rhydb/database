@@ -1,0 +1,10 @@
+Makefile
+CMakeFiles
+CMakeCache.txt
+*.cmake
+*.a
+*.obj
+bin/
+compile_commands.json
+.cache/
+_deps/
