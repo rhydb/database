@@ -13,6 +13,9 @@ struct Token {
     Semicolon,
     SingleQuote,
     DoubleQuote,
+    Bang,
+    Equals,
+    BangEquals,
     LessThan,
     LessThanEqual,
     GreaterThan,
@@ -49,6 +52,7 @@ public:
   Lexer(const char *start) noexcept : mStart(start) {}
   
   Token next() noexcept;
+  bool hadError() const noexcept { return mHadError; }
 
 private:
   char peek() const noexcept { return *mStart; }
@@ -59,6 +63,8 @@ private:
 
   bool isWhiteSpace(char c) const noexcept;
   const char *mStart; 
+
+  bool mHadError = false;
 };
 
 

@@ -2,7 +2,7 @@
 
 #include "tokens.hpp"
 
-TEST(Lexer, ParseNumber) {
+TEST(LexerNumbers, ParseNumber) {
   Lexer l = "123";
   Token num = l.next();
   EXPECT_EQ(num.kind(), Token::Kind::Number);
@@ -11,7 +11,7 @@ TEST(Lexer, ParseNumber) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(Lexer, ParseDecimalNumber) {
+TEST(LexerNumbers, ParseDecimalNumber) {
   Lexer l = "123.456";
   Token num = l.next();
   EXPECT_EQ(num.kind(), Token::Kind::Number);

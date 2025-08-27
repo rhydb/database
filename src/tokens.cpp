@@ -12,6 +12,9 @@ std::ostream &operator<<(std::ostream &os, const Token::Kind &kind)
       [static_cast<int>(Token::Kind::Semicolon)] = "Semicolon",
       [static_cast<int>(Token::Kind::SingleQuote)] = "SingleQuote",
       [static_cast<int>(Token::Kind::DoubleQuote)] = "DoubleQuote",
+      [static_cast<int>(Token::Kind::Bang)] = "Bang",
+      [static_cast<int>(Token::Kind::Equals)] = "Equals",
+      [static_cast<int>(Token::Kind::BangEquals)] = "BangEquals",
       [static_cast<int>(Token::Kind::LessThan)] = "LessThan",
       [static_cast<int>(Token::Kind::LessThanEqual)] = "LessThanEqual",
       [static_cast<int>(Token::Kind::GreaterThan)] = "GreaterThan",
@@ -80,10 +83,15 @@ Token Lexer::next() noexcept
   case CharacterKind::Puncutation:
     switch (c)
     {
+    case '=':
+      return charToken(Token::Kind::Equals);
+    case '!':
+      return matchOr(Token::Kind::Bang, '=', Token::Kind::BangEquals);
     case '<':
       return matchOr(Token::Kind::LessThan, '=', Token::Kind::LessThanEqual);
     case '>':
-      return matchOr(Token::Kind::GreaterThan, '=', Token::Kind::GreaterThanEqual);
+      return matchOr(Token::Kind::GreaterThan, '=',
+                     Token::Kind::GreaterThanEqual);
     case '(':
       return charToken(Token::Kind::OpenParen);
     case ')':
@@ -122,39 +130,53 @@ Token Lexer::next() noexcept
       break;
     }
 
-    switch (kind)
+    switch (where)
     {
-    case CharacterKind::Alphabetical:
-      if (where != Number && where != Identifier)
+    case Decimal: /* fallthrough */
+    case Number:
+      // only allow going from a number to a decimal
+      switch (kind)
       {
-        goto done;
-      }
-      where = Identifier;
-      break;
-    case CharacterKind::Numeric:
-      // numbers can be in numbers,decimals,identifiers so don't change anything
-      break;
-    case CharacterKind::Puncutation:
-      // punctuation on its own is handled above
-      if (where == Number && c == '.')
-      {
-        // allow 1 point in a number to be a decimal
-        where = Decimal;
-      }
-      else if (where == Identifier && c == '_')
-      {
-        // allow underscores in identifiers
-        where = Identifier;
-      }
-      else
-      {
-        // other than semicolons this is probably an error
+      case CharacterKind::Numeric:
+        break;
+      case CharacterKind::Puncutation:
+        if (c == '.' && where == Number)
+        {
+          where = Decimal;
+        }
+        else
+        {
+          goto done;
+        }
+        break;
+      default:
+        // don't allow going from number to identifier - it would be messy with
+        // underscores
+        mHadError = true;
         goto done;
       }
       break;
-    case CharacterKind::End: /* fallthrough */
-    case CharacterKind::Unknown:
+    case Identifier:
+      switch (kind)
+      {
+      case CharacterKind::Alphabetical: /* fallthrough */
+      case CharacterKind::Numeric:
+        break;
+      case CharacterKind::Puncutation:
+        if (c == '_')
+        {
+          // allow underscores in identifiers
+          break;
+        }
+        goto done;
+      default:
+        goto done;
+      }
+      break;
+    case Unknown:
+      mHadError = true;
       goto done;
+      break;
     }
 
     get();
@@ -187,10 +209,10 @@ Token Lexer::charToken(Token::Kind kind) noexcept
   return Token(kind, mStart++, 1);
 }
 
-
-// consumes the current character and checks the following character against match
-// if equal consumes match and returns onMatch otherwise returns fallback
-Token Lexer::matchOr(Token::Kind fallback, char match, Token::Kind onMatch) noexcept
+// consumes the current character and checks the following character against
+// match if equal consumes match and returns onMatch otherwise returns fallback
+Token Lexer::matchOr(Token::Kind fallback, char match,
+                     Token::Kind onMatch) noexcept
 {
   const char *tokenStart = mStart++;
   if (peek() == match)

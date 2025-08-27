@@ -2,7 +2,7 @@
 
 #include "tokens.hpp"
 
-TEST(Lexer, ParseIdentifier) {
+TEST(LexerIdentifiers, ParseIdentifier) {
   Lexer l = "hello";
   Token token = l.next();
   EXPECT_EQ(token.kind(), Token::Kind::Identifier);
@@ -11,7 +11,7 @@ TEST(Lexer, ParseIdentifier) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(Lexer, ParseIdentifierUnderscores) {
+TEST(LexerIdentifiers, ParseIdentifierUnderscores) {
   Lexer l = "hello_world";
   Token token = l.next();
   EXPECT_EQ(token.kind(), Token::Kind::Identifier);
@@ -20,7 +20,7 @@ TEST(Lexer, ParseIdentifierUnderscores) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(Lexer, ParseIdentifierUnderscoreStart) {
+TEST(LexerIdentifiers, ParseIdentifierUnderscoreStart) {
   Lexer l = "_hello";
   Token token = l.next();
   EXPECT_EQ(token.kind(), Token::Kind::Unexpected);
@@ -34,7 +34,7 @@ TEST(Lexer, ParseIdentifierUnderscoreStart) {
 }
 
 
-TEST(Lexer, ParseMultipleIdentifiers) {
+TEST(LexerIdentifiers, ParseMultipleIdentifiers) {
   Lexer l = "hello world";
   Token hello = l.next();
   EXPECT_EQ(hello.kind(), Token::Kind::Identifier);
@@ -47,7 +47,7 @@ TEST(Lexer, ParseMultipleIdentifiers) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(Lexer, ParseIdentifierNumber) {
+TEST(LexerIdentifiers, ParseIdentifierNumber) {
   Lexer l = "hello123";
   Token identifier = l.next();
   EXPECT_EQ(identifier.kind(), Token::Kind::Identifier);
