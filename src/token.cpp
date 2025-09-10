@@ -1,7 +1,6 @@
 #include "token.hpp"
-#include <tuple>
 
-inline constexpr const char *kindToString(Token::Kind kind)
+static inline constexpr const char *kindToString(Token::Kind kind)
 {
   switch (kind)
   {
