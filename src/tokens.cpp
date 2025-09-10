@@ -6,52 +6,29 @@ static const char *kindToString(Token::Kind kind)
 {
   switch (kind)
   {
-  case Token::Kind::Identifier:
-    return "Identifier";
-  case Token::Kind::Number:
-    return "Number";
-  case Token::Kind::Slash:
-    return "Slash";
-  case Token::Kind::Star:
-    return "Star";
-  case Token::Kind::Plus:
-    return "Plus";
-  case Token::Kind::Minus:
-    return "Minus";
-  case Token::Kind::OpenParen:
-    return "OpenParen";
-  case Token::Kind::CloseParen:
-    return "CloseParen";
-  case Token::Kind::Comma:
-    return "Comma";
-  case Token::Kind::Semicolon:
-    return "Semicolon";
-  case Token::Kind::String:
-    return "String";
-  case Token::Kind::Bang:
-    return "Bang";
-  case Token::Kind::Equals:
-    return "Equals";
-  case Token::Kind::DoubleEquals:
-    return "DoubleEquals";
-  case Token::Kind::BangEquals:
-    return "BangEquals";
-  case Token::Kind::LessThan:
-    return "LessThan";
-  case Token::Kind::LessThanEqual:
-    return "LessThanEqual";
-  case Token::Kind::GreaterThan:
-    return "GreaterThan";
-  case Token::Kind::GreaterThanEqual:
-    return "GreaterThanEqual";
-  case Token::Kind::True:
-    return "True";
-  case Token::Kind::False:
-    return "False";
-  case Token::Kind::End:
-    return "End";
-  case Token::Kind::Unexpected:
-    return "Unexpected";
+  case Token::Kind::Identifier: return "Identifier";
+  case Token::Kind::Number: return "Number";
+  case Token::Kind::Slash: return "Slash";
+  case Token::Kind::Star: return "Star";
+  case Token::Kind::Plus: return "Plus";
+  case Token::Kind::Minus: return "Minus";
+  case Token::Kind::OpenParen: return "OpenParen";
+  case Token::Kind::CloseParen: return "CloseParen";
+  case Token::Kind::Comma: return "Comma";
+  case Token::Kind::Semicolon: return "Semicolon";
+  case Token::Kind::String: return "String";
+  case Token::Kind::Bang: return "Bang";
+  case Token::Kind::Equals: return "Equals";
+  case Token::Kind::DoubleEquals: return "DoubleEquals";
+  case Token::Kind::BangEquals: return "BangEquals";
+  case Token::Kind::LessThan: return "LessThan";
+  case Token::Kind::LessThanEqual: return "LessThanEqual";
+  case Token::Kind::GreaterThan: return "GreaterThan";
+  case Token::Kind::GreaterThanEqual: return "GreaterThanEqual";
+  case Token::Kind::True: return "True";
+  case Token::Kind::False: return "False";
+  case Token::Kind::End: return "End";
+  case Token::Kind::Unexpected: return "Unexpected";
   };
   return "Unknown";
 }
