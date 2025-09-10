@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
 
-#include "tokens.hpp"
+#include "scanner.hpp"
 
-TEST(LexerOperators, ParsePunctuation) {
+TEST(ScannerOperators, ParsePunctuation) {
   Scanner l = ";()";
   Token token = l.next();
   EXPECT_EQ(token.kind(), Token::Kind::Semicolon);
@@ -19,7 +19,7 @@ TEST(LexerOperators, ParsePunctuation) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(LexerOperators, ParseLessThan) {
+TEST(ScannerOperators, ParseLessThan) {
   Scanner l = "5<4";
   Token token = l.next();
   EXPECT_EQ(token.kind(), Token::Kind::Number);
@@ -36,7 +36,7 @@ TEST(LexerOperators, ParseLessThan) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(LexerOperators, ParseLessThanEqual) {
+TEST(ScannerOperators, ParseLessThanEqual) {
   Scanner l = "5<=4";
   Token token = l.next();
   EXPECT_EQ(token.kind(), Token::Kind::Number);
@@ -53,7 +53,7 @@ TEST(LexerOperators, ParseLessThanEqual) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(LexerOperators, ParseEquals) {
+TEST(ScannerOperators, ParseEquals) {
   Scanner l = "5=4";
   Token token = l.next();
   EXPECT_EQ(token.kind(), Token::Kind::Number);
@@ -70,7 +70,7 @@ TEST(LexerOperators, ParseEquals) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(LexerOperators, DoubleEquals) {
+TEST(ScannerOperators, DoubleEquals) {
   Scanner l = "5==4";
   Token token = l.next();
   EXPECT_EQ(token.kind(), Token::Kind::Number);
@@ -87,7 +87,7 @@ TEST(LexerOperators, DoubleEquals) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(LexerOperators, TwoEqualsWithSpace) {
+TEST(ScannerOperators, TwoEqualsWithSpace) {
   Scanner l = "5 = = 4";
   Token token = l.next();
   EXPECT_EQ(token.kind(), Token::Kind::Number);
@@ -108,7 +108,7 @@ TEST(LexerOperators, TwoEqualsWithSpace) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(LexerOperators, ParseBang) {
+TEST(ScannerOperators, ParseBang) {
   Scanner l = "5!4";
   Token token = l.next();
   EXPECT_EQ(token.kind(), Token::Kind::Number);
@@ -125,7 +125,7 @@ TEST(LexerOperators, ParseBang) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(LexerOperators, ParseBangEquals) {
+TEST(ScannerOperators, ParseBangEquals) {
   Scanner l = "5!=4";
   Token token = l.next();
   EXPECT_EQ(token.kind(), Token::Kind::Number);
@@ -142,7 +142,7 @@ TEST(LexerOperators, ParseBangEquals) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(LexerOperators, ParseEqualsBang) {
+TEST(ScannerOperators, ParseEqualsBang) {
   Scanner l = "5=!4";
   Token token = l.next();
   EXPECT_EQ(token.kind(), Token::Kind::Number);

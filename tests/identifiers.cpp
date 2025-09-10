@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
 
-#include "tokens.hpp"
+#include "scanner.hpp"
 
-TEST(LexerIdentifiers, ParseIdentifier) {
+TEST(ScannerIdentifiers, ParseIdentifier) {
   Scanner l = "hello";
   Token token = l.next();
   EXPECT_EQ(token.kind(), Token::Kind::Identifier);
@@ -11,7 +11,7 @@ TEST(LexerIdentifiers, ParseIdentifier) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(LexerIdentifiers, ParseIdentifierUnderscores) {
+TEST(ScannerIdentifiers, ParseIdentifierUnderscores) {
   Scanner l = "hello_world";
   Token token = l.next();
   EXPECT_EQ(token.kind(), Token::Kind::Identifier);
@@ -20,7 +20,7 @@ TEST(LexerIdentifiers, ParseIdentifierUnderscores) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(LexerIdentifiers, ParseIdentifierUnderscoreStart) {
+TEST(ScannerIdentifiers, ParseIdentifierUnderscoreStart) {
   Scanner l = "_hello";
   Token token = l.next();
   EXPECT_EQ(token.kind(), Token::Kind::Unexpected);
@@ -34,7 +34,7 @@ TEST(LexerIdentifiers, ParseIdentifierUnderscoreStart) {
 }
 
 
-TEST(LexerIdentifiers, ParseMultipleIdentifiers) {
+TEST(ScannerIdentifiers, ParseMultipleIdentifiers) {
   Scanner l = "hello world";
   Token hello = l.next();
   EXPECT_EQ(hello.kind(), Token::Kind::Identifier);
@@ -47,7 +47,7 @@ TEST(LexerIdentifiers, ParseMultipleIdentifiers) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(LexerIdentifiers, ParseIdentifierNumber) {
+TEST(ScannerIdentifiers, ParseIdentifierNumber) {
   Scanner l = "hello123";
   Token identifier = l.next();
   EXPECT_EQ(identifier.kind(), Token::Kind::Identifier);
@@ -56,7 +56,7 @@ TEST(LexerIdentifiers, ParseIdentifierNumber) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(LexerIdentifiers, LineCol) {
+TEST(ScannerIdentifiers, LineCol) {
   Scanner l = "one\ntwo three\nfour";
   Token t = l.next();
   EXPECT_EQ(t.kind(), Token::Kind::Identifier);
@@ -81,4 +81,25 @@ TEST(LexerIdentifiers, LineCol) {
   EXPECT_EQ(t.lexeme(), "four");
   EXPECT_EQ(t.line(), 3);
   EXPECT_EQ(t.col(), 0);
+}
+
+TEST(ScannerIdentifiers, ReservedWords) {
+  Scanner l = "true or andy oR";
+  Token token = l.next();
+  EXPECT_EQ(token.kind(), Token::Kind::True);
+  EXPECT_EQ(token.lexeme(), "true");
+
+  token = l.next();
+  EXPECT_EQ(token.kind(), Token::Kind::Or);
+  EXPECT_EQ(token.lexeme(), "or");
+
+  token = l.next();
+  EXPECT_EQ(token.kind(), Token::Kind::Identifier);
+  EXPECT_EQ(token.lexeme(), "andy");
+
+  token = l.next();
+  EXPECT_EQ(token.kind(), Token::Kind::Identifier);
+  EXPECT_EQ(token.lexeme(), "oR");
+
+  EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }

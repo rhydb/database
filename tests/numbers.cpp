@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
 
-#include "tokens.hpp"
+#include "scanner.hpp"
 
-TEST(LexerNumbers, ParseNumber) {
+TEST(ScannerNumbers, ParseNumber) {
   Scanner l = "123";
   Token num = l.next();
   EXPECT_EQ(num.kind(), Token::Kind::Number);
@@ -12,7 +12,7 @@ TEST(LexerNumbers, ParseNumber) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(LexerNumbers, ParseDecimalNumber) {
+TEST(ScannerNumbers, ParseDecimalNumber) {
   Scanner l = "123.456";
   Token num = l.next();
   EXPECT_EQ(num.kind(), Token::Kind::Number);

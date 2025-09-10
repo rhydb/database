@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
 
-#include "tokens.hpp"
+#include "scanner.hpp"
 
-TEST(LexerStrings, DoubleQuoteString) {
+TEST(ScannerStrings, DoubleQuoteString) {
   Scanner l = "\"hello\"";
   Token identifier = l.next();
   EXPECT_EQ(identifier.kind(), Token::Kind::String);
@@ -11,7 +11,7 @@ TEST(LexerStrings, DoubleQuoteString) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(LexerStrings, SingleQuoteString) {
+TEST(ScannerStrings, SingleQuoteString) {
   Scanner l = "'hello'";
   Token identifier = l.next();
   EXPECT_EQ(identifier.kind(), Token::Kind::String);
@@ -20,7 +20,7 @@ TEST(LexerStrings, SingleQuoteString) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(LexerStrings, EscapedDoubleString) {
+TEST(ScannerStrings, EscapedDoubleString) {
   // escape the slash to escape the quote
   Scanner l = "\"hel\\\"lo\"";
   Token identifier = l.next();
@@ -30,7 +30,7 @@ TEST(LexerStrings, EscapedDoubleString) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(LexerStrings, EscapedSingleString) {
+TEST(ScannerStrings, EscapedSingleString) {
   // escape the slash to escape the quote
   Scanner l = "'hel\\'lo'";
   Token identifier = l.next();
@@ -40,7 +40,7 @@ TEST(LexerStrings, EscapedSingleString) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(LexerStrings, DoubleInSingleString) {
+TEST(ScannerStrings, DoubleInSingleString) {
   Scanner l = "'\"hello\"'";
   Token identifier = l.next();
   EXPECT_EQ(identifier.kind(), Token::Kind::String);
@@ -49,7 +49,7 @@ TEST(LexerStrings, DoubleInSingleString) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(LexerStrings, SingleInDoubleString) {
+TEST(ScannerStrings, SingleInDoubleString) {
   Scanner l = "\"'hello'\"";
   Token identifier = l.next();
   EXPECT_EQ(identifier.kind(), Token::Kind::String);
@@ -58,7 +58,7 @@ TEST(LexerStrings, SingleInDoubleString) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(LexerStrings, MultiWordString) {
+TEST(ScannerStrings, MultiWordString) {
   Scanner l = "'hello world'";
   Token s = l.next();
   EXPECT_EQ(s.kind(), Token::Kind::String);
@@ -66,7 +66,7 @@ TEST(LexerStrings, MultiWordString) {
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
 
-TEST(LexerStrings, OpenString) {
+TEST(ScannerStrings, OpenString) {
   Scanner l = "'hello";
   Token s = l.next();
   EXPECT_EQ(s.kind(), Token::Kind::String);
