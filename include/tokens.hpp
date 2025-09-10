@@ -122,20 +122,20 @@ struct Scanner::iterator
   using pointer = const Token *;
   using reference = const Token &;
 
-  explicit iterator(Scanner *lexer) : mLexer(lexer), isEnd(false), cached() {
-    if (!lexer || lexer->peek() == '\0')
+  explicit iterator(Scanner *scanner) : mScanner(scanner), isEnd(false), cached() {
+    if (!scanner || scanner->peek() == '\0')
     {
       isEnd = true;
       return;
     }
 
-    cached = lexer->next();
+    cached = scanner->next();
     if (cached.is(Token::Kind::End))
     {
       isEnd = true;
     }
   }
-  iterator() : mLexer(nullptr), isEnd(true), cached() {}
+  iterator() : mScanner(nullptr), isEnd(true), cached() {}
 
   reference operator*() const { return cached; }
   pointer operator->() const
@@ -145,12 +145,12 @@ struct Scanner::iterator
   iterator &operator++()
   {
     std::cout << "incrementing" << std::endl;
-    if (isEnd || !mLexer)
+    if (isEnd || !mScanner)
     {
       return *this;
     }
 
-    cached = mLexer->next();
+    cached = mScanner->next();
     if (cached.is(Token::Kind::End))
     {
       isEnd = true;
@@ -171,7 +171,7 @@ struct Scanner::iterator
       return true;
     }
 
-    return a.mLexer == b.mLexer && a.cached == b.cached && a.isEnd == b.isEnd;
+    return a.mScanner == b.mScanner && a.cached == b.cached && a.isEnd == b.isEnd;
   }
   friend bool operator!=(const iterator& a, const iterator& b)
   {
@@ -179,7 +179,7 @@ struct Scanner::iterator
   }
 
 private:
-  Scanner *mLexer;
+  Scanner *mScanner;
   bool isEnd = false;
   Token cached;
 };
