@@ -3,6 +3,9 @@
 #include <string>
 #include <iostream>
 
+#include "parser.hpp"
+#include "visitor.hpp"
+
 void printPrompt()
 {
   std::cout << "database: ";
@@ -21,11 +24,16 @@ int main() {
     }
 
     Lexer lex = Lexer(input.c_str());
+    Parser p = Parser(lex);
+    auto expr = p.parse();
 
-    Token token = Token();
-    while (!(token = lex.next()).isOneOf(Token::Kind::End, Token::Kind::Unexpected))
+    if (!expr)
     {
-      std::cout << token.kind() << ":" << token.lexeme() << std::endl;
+      std::cout << "Failed to parse" << std::endl;
+      continue;
     }
+
+    AstPrinter ap = AstPrinter();
+    std::cout << ap.print(expr) << std::endl;
   }
 }

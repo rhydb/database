@@ -55,3 +55,30 @@ TEST(LexerIdentifiers, ParseIdentifierNumber) {
 
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
+
+TEST(LexerIdentifiers, LineCol) {
+  Lexer l = "one\ntwo three\nfour";
+  Token t = l.next();
+  EXPECT_EQ(t.kind(), Token::Kind::Identifier);
+  EXPECT_EQ(t.lexeme(), "one");
+  EXPECT_EQ(t.line(), 1);
+  EXPECT_EQ(t.col(), 0);
+
+  t = l.next();
+  EXPECT_EQ(t.kind(), Token::Kind::Identifier);
+  EXPECT_EQ(t.lexeme(), "two");
+  EXPECT_EQ(t.line(), 2);
+  EXPECT_EQ(t.col(), 0);
+
+  t = l.next();
+  EXPECT_EQ(t.kind(), Token::Kind::Identifier);
+  EXPECT_EQ(t.lexeme(), "three");
+  EXPECT_EQ(t.line(), 2);
+  EXPECT_EQ(t.col(), 4);
+
+  t = l.next();
+  EXPECT_EQ(t.kind(), Token::Kind::Identifier);
+  EXPECT_EQ(t.lexeme(), "four");
+  EXPECT_EQ(t.line(), 3);
+  EXPECT_EQ(t.col(), 0);
+}

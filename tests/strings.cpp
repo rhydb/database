@@ -57,3 +57,19 @@ TEST(LexerStrings, SingleInDoubleString) {
 
   EXPECT_EQ(l.next().kind(), Token::Kind::End);
 }
+
+TEST(LexerStrings, MultiWordString) {
+  Lexer l = "'hello world'";
+  Token s = l.next();
+  EXPECT_EQ(s.kind(), Token::Kind::String);
+  EXPECT_EQ(s.lexeme(), "hello world");
+  EXPECT_EQ(l.next().kind(), Token::Kind::End);
+}
+
+TEST(LexerStrings, OpenString) {
+  Lexer l = "'hello";
+  Token s = l.next();
+  EXPECT_EQ(s.kind(), Token::Kind::String);
+  EXPECT_EQ(s.lexeme(), "hello");
+  EXPECT_EQ(l.next().kind(), Token::Kind::End);
+}
