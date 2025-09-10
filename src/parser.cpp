@@ -27,11 +27,11 @@ std::unique_ptr<Expr::IExpr> Parser::equality()
 {
   auto expr = comparison();
 
-  for (const Token &t : mScanner)
+  for (const Token &t : m_scanner)
   {
     if (!t.isOneOf(Token::Kind::BangEquals, Token::Kind::DoubleEquals))
     {
-      mScanner.goBack();
+      m_scanner.goBack();
       break;
     }
 
@@ -46,12 +46,12 @@ std::unique_ptr<Expr::IExpr> Parser::comparison()
 {
   auto expr = term();
 
-  for (const Token &t : mScanner)
+  for (const Token &t : m_scanner)
   {
     if (!t.isOneOf(Token::Kind::GreaterThan, Token::Kind::GreaterThanEqual,
                    Token::Kind::LessThan, Token::Kind::LessThanEqual))
     {
-      mScanner.goBack();
+      m_scanner.goBack();
       break;
     }
 
@@ -65,11 +65,11 @@ std::unique_ptr<Expr::IExpr> Parser::comparison()
 std::unique_ptr<Expr::IExpr> Parser::term()
 {
   auto expr = factor();
-  for (const Token &t : mScanner)
+  for (const Token &t : m_scanner)
   {
     if (!t.isOneOf(Token::Kind::Minus, Token::Kind::Plus))
     {
-      mScanner.goBack();
+      m_scanner.goBack();
       break;
     }
 
@@ -83,11 +83,11 @@ std::unique_ptr<Expr::IExpr> Parser::term()
 std::unique_ptr<Expr::IExpr> Parser::factor()
 {
   auto expr = unary();
-  for (const Token &t : mScanner)
+  for (const Token &t : m_scanner)
   {
     if (!t.isOneOf(Token::Kind::Slash, Token::Kind::Star))
     {
-      mScanner.goBack();
+      m_scanner.goBack();
       break;
     }
 
@@ -100,10 +100,10 @@ std::unique_ptr<Expr::IExpr> Parser::factor()
 
 std::unique_ptr<Expr::IExpr> Parser::unary()
 {
-  Token op = mScanner.peekToken();
+  Token op = m_scanner.peekToken();
   if (op.isOneOf(Token::Kind::Bang, Token::Kind::Minus))
   {
-    mScanner.next();
+    m_scanner.next();
     auto right = unary();
     return std::make_unique<Expr::Unary>(op, std::move(right));
   }
@@ -113,19 +113,19 @@ std::unique_ptr<Expr::IExpr> Parser::unary()
 
 std::unique_ptr<Expr::IExpr> Parser::primary()
 {
-  Token t = mScanner.peekToken();
+  Token t = m_scanner.peekToken();
   if (t.isOneOf(Token::Kind::True, Token::Kind::False, Token::Kind::Number,
                 Token::Kind::String))
   {
-    mScanner.next();
+    m_scanner.next();
     return std::make_unique<Expr::Literal>(t);
   }
 
   if (t.is(Token::Kind::OpenParen))
   {
-    mScanner.next();
+    m_scanner.next();
     auto expr = expression();
-    Token next = mScanner.next();
+    Token next = m_scanner.next();
     if (next.kind() != Token::Kind::CloseParen)
     {
       error(next, "Expected ')' after expression");

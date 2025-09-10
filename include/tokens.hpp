@@ -32,31 +32,31 @@ struct Token
     Unexpected,
   };
 
-  Token() noexcept : mKind(Token::Kind::End), mLexeme() {}
+  Token() noexcept : m_kind(Token::Kind::End), m_lexeme() {}
 
   bool operator==(const Token& b) const { return kind() == b.kind() && lexeme() == b.lexeme(); }
 
   Token(double number, const char *str, std::size_t len) noexcept
-      : mKind(Token::Kind::Number), mLexeme(str, len)
+      : m_kind(Token::Kind::Number), m_lexeme(str, len)
   {
     value.number = number;
   }
   Token(Kind kind, const char *start, std::size_t len, int line = 0, int col = 0) noexcept
-      : mKind(kind), mLexeme(start, len), mLine(line), mCol(col)
+      : m_kind(kind), m_lexeme(start, len), m_line(line), m_col(col)
   {
   }
   Token(Kind kind, const char *start, const char *end, int line = 0, int col = 0) noexcept
-      : mKind(kind), mLexeme(start, end - start), mLine(line), mCol(col)
+      : m_kind(kind), m_lexeme(start, end - start), m_line(line), m_col(col)
   {
   }
 
-  Kind kind() const noexcept { return mKind; }
-  void setKind(Kind kind) noexcept { mKind = kind; }
+  Kind kind() const noexcept { return m_kind; }
+  void setKind(Kind kind) noexcept { m_kind = kind; }
 
-  bool is(Kind kind) const noexcept { return mKind == kind; }
+  bool is(Kind kind) const noexcept { return m_kind == kind; }
   bool isOneOf(Kind k1, Kind k2) const noexcept
   {
-    return mKind == k1 || mKind == k2;
+    return m_kind == k1 || m_kind == k2;
   }
 
   template <typename... Ts>
@@ -65,9 +65,9 @@ struct Token
     return is(k1) || isOneOf(k2, ks...);
   }
 
-  std::string_view lexeme() const noexcept { return mLexeme; }
-  int line() const noexcept { return mLine; }
-  int col() const noexcept { return mCol; }
+  std::string_view lexeme() const noexcept { return m_lexeme; }
+  int line() const noexcept { return m_line; }
+  int col() const noexcept { return m_col; }
 
   union
   {
@@ -75,21 +75,21 @@ struct Token
   } value;
 
 private:
-  Kind mKind;
-  std::string_view mLexeme;
-  int mLine, mCol;
+  Kind m_kind;
+  std::string_view m_lexeme;
+  int m_line, m_col;
 };
 
 class Scanner
 {
 public:
-  Scanner(const char *start) noexcept : mStart(start) {}
+  Scanner(const char *start) noexcept : m_start(start) {}
 
   Token next() noexcept;
   Token peekToken() noexcept;
   Token expect(Token::Kind kind, const char *message);
   void goBack();
-  bool hadError() const noexcept { return mHadError; }
+  bool hadError() const noexcept { return m_hadError; }
 
   struct iterator;
   iterator begin();
@@ -97,7 +97,7 @@ public:
 
 private:
   Token nextToken() noexcept;
-  char peek() const noexcept { return *mStart; }
+  char peek() const noexcept { return *m_start; }
   char get() noexcept;
   Token charToken(Token::Kind kind) noexcept;
   Token identifierOrReserved(const char* start, const char* end) const noexcept;
@@ -105,13 +105,13 @@ private:
 
   bool isNonEscaped(char c, char end, bool &escapeNext) const noexcept;
   bool isWhiteSpace(char c) const noexcept;
-  const char *mStart;
-  const char *mPrevStart;
+  const char *m_start;
+  const char *m_prevStart;
 
   Token endToken = Token();
-  bool mHadError = false;
-  int mLine = 1;
-  int mCol = 0;
+  bool m_hadError = false;
+  int m_line = 1;
+  int m_col = 0;
 };
 
 struct Scanner::iterator
@@ -122,7 +122,7 @@ struct Scanner::iterator
   using pointer = const Token *;
   using reference = const Token &;
 
-  explicit iterator(Scanner *scanner) : mScanner(scanner), isEnd(false), cached() {
+  explicit iterator(Scanner *scanner) : m_scanner(scanner), isEnd(false), cached() {
     if (!scanner || scanner->peek() == '\0')
     {
       isEnd = true;
@@ -135,7 +135,7 @@ struct Scanner::iterator
       isEnd = true;
     }
   }
-  iterator() : mScanner(nullptr), isEnd(true), cached() {}
+  iterator() : m_scanner(nullptr), isEnd(true), cached() {}
 
   reference operator*() const { return cached; }
   pointer operator->() const
@@ -145,12 +145,12 @@ struct Scanner::iterator
   iterator &operator++()
   {
     std::cout << "incrementing" << std::endl;
-    if (isEnd || !mScanner)
+    if (isEnd || !m_scanner)
     {
       return *this;
     }
 
-    cached = mScanner->next();
+    cached = m_scanner->next();
     if (cached.is(Token::Kind::End))
     {
       isEnd = true;
@@ -171,7 +171,7 @@ struct Scanner::iterator
       return true;
     }
 
-    return a.mScanner == b.mScanner && a.cached == b.cached && a.isEnd == b.isEnd;
+    return a.m_scanner == b.m_scanner && a.cached == b.cached && a.isEnd == b.isEnd;
   }
   friend bool operator!=(const iterator& a, const iterator& b)
   {
@@ -179,7 +179,7 @@ struct Scanner::iterator
   }
 
 private:
-  Scanner *mScanner;
+  Scanner *m_scanner;
   bool isEnd = false;
   Token cached;
 };
