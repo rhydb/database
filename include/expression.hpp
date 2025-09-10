@@ -9,6 +9,7 @@ namespace Expr {
 
 struct IExpr
 {
+  virtual ~IExpr() {};
   virtual void accept(ExprVisitor &visitor) = 0;
 };
 
