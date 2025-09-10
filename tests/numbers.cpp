@@ -3,7 +3,7 @@
 #include "tokens.hpp"
 
 TEST(LexerNumbers, ParseNumber) {
-  Lexer l = "123";
+  Scanner l = "123";
   Token num = l.next();
   EXPECT_EQ(num.kind(), Token::Kind::Number);
   EXPECT_EQ(num.lexeme(), "123");
@@ -13,7 +13,7 @@ TEST(LexerNumbers, ParseNumber) {
 }
 
 TEST(LexerNumbers, ParseDecimalNumber) {
-  Lexer l = "123.456";
+  Scanner l = "123.456";
   Token num = l.next();
   EXPECT_EQ(num.kind(), Token::Kind::Number);
   EXPECT_EQ(num.lexeme(), "123.456");

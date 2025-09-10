@@ -101,7 +101,7 @@ static CharacterKind classifyChar(char c)
   return CharacterKind::Unknown;
 }
 
-char Lexer::get() noexcept
+char Scanner::get() noexcept
 {
   char c = *mStart++;
   mCol++;
@@ -113,19 +113,19 @@ char Lexer::get() noexcept
   return c;
 }
 
-Token Lexer::next() noexcept
+Token Scanner::next() noexcept
 {
   mPrevStart = mStart;
   Token t = nextToken();
   return t;
 }
 
-void Lexer::goBack()
+void Scanner::goBack()
 {
   mStart = mPrevStart;
 }
 
-Token Lexer::nextToken() noexcept
+Token Scanner::nextToken() noexcept
 {
   while (isWhiteSpace(peek()))
   {
@@ -318,7 +318,7 @@ done:
   }
 }
 
-Token Lexer::identifierOrReserved(const char *start,
+Token Scanner::identifierOrReserved(const char *start,
                                   const char *end) const noexcept
 {
   struct ReservedIdentifier
@@ -344,7 +344,7 @@ Token Lexer::identifierOrReserved(const char *start,
   return Token(Token::Kind::Identifier, start, end, mLine, mCol);
 }
 
-Token Lexer::peekToken() noexcept
+Token Scanner::peekToken() noexcept
 {
   int prevLine = mLine;
   int prevCol = mCol;
@@ -356,16 +356,16 @@ Token Lexer::peekToken() noexcept
   return t;
 }
 
-bool Lexer::isWhiteSpace(char c) const noexcept { return c > 0 && c <= ' '; }
+bool Scanner::isWhiteSpace(char c) const noexcept { return c > 0 && c <= ' '; }
 
-Token Lexer::charToken(Token::Kind kind) noexcept
+Token Scanner::charToken(Token::Kind kind) noexcept
 {
   return Token(kind, mStart++, 1, mLine, mCol);
 }
 
 // consumes the current character and checks the following character against
 // match if equal consumes match and returns onMatch otherwise returns fallback
-Token Lexer::matchOr(Token::Kind fallback, char match,
+Token Scanner::matchOr(Token::Kind fallback, char match,
                      Token::Kind onMatch, int col) noexcept
 {
   const char *tokenStart = mStart++;
@@ -377,7 +377,7 @@ Token Lexer::matchOr(Token::Kind fallback, char match,
   return Token(fallback, tokenStart, 1, mLine, col);
 }
 
-bool Lexer::isNonEscaped(char c, char end, bool &escapeNext) const noexcept
+bool Scanner::isNonEscaped(char c, char end, bool &escapeNext) const noexcept
 {
   if (escapeNext)
   {
@@ -399,5 +399,5 @@ bool Lexer::isNonEscaped(char c, char end, bool &escapeNext) const noexcept
   return false;
 }
 
-Lexer::iterator Lexer::begin() { return iterator(this); }
-Lexer::iterator Lexer::end() { return iterator(); }
+Scanner::iterator Scanner::begin() { return iterator(this); }
+Scanner::iterator Scanner::end() { return iterator(); }

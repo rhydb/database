@@ -23,7 +23,7 @@ int main() {
       break;
     }
 
-    Lexer lex = Lexer(input.c_str());
+    Scanner lex = Scanner(input.c_str());
     Parser p = Parser(lex);
     auto expr = p.parse();
 

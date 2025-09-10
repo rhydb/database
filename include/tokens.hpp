@@ -80,10 +80,10 @@ private:
   int mLine, mCol;
 };
 
-class Lexer
+class Scanner
 {
 public:
-  Lexer(const char *start) noexcept : mStart(start) {}
+  Scanner(const char *start) noexcept : mStart(start) {}
 
   Token next() noexcept;
   Token peekToken() noexcept;
@@ -114,7 +114,7 @@ private:
   int mCol = 0;
 };
 
-struct Lexer::iterator
+struct Scanner::iterator
 {
   using iterator_category = std::input_iterator_tag;
   using difference_type = std::ptrdiff_t;
@@ -122,7 +122,7 @@ struct Lexer::iterator
   using pointer = const Token *;
   using reference = const Token &;
 
-  explicit iterator(Lexer *lexer) : mLexer(lexer), isEnd(false), cached() {
+  explicit iterator(Scanner *lexer) : mLexer(lexer), isEnd(false), cached() {
     if (!lexer || lexer->peek() == '\0')
     {
       isEnd = true;
@@ -179,7 +179,7 @@ struct Lexer::iterator
   }
 
 private:
-  Lexer *mLexer;
+  Scanner *mLexer;
   bool isEnd = false;
   Token cached;
 };

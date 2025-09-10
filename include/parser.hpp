@@ -19,7 +19,7 @@ primary        → NUMBER | STRING | "true" | "false" | "nil"
 class Parser
 {
 public:
-  Parser(Lexer &lexer) : mLexer(lexer) {}
+  Parser(Scanner &lexer) : mLexer(lexer) {}
   std::unique_ptr<Expr::IExpr> parse();
 
 private:
@@ -32,5 +32,5 @@ private:
   std::unique_ptr<Expr::IExpr> unary();
   std::unique_ptr<Expr::IExpr> primary();
 
-  Lexer mLexer;
+  Scanner mLexer;
 };

@@ -3,7 +3,7 @@
 #include "tokens.hpp"
 
 TEST(LexerStrings, DoubleQuoteString) {
-  Lexer l = "\"hello\"";
+  Scanner l = "\"hello\"";
   Token identifier = l.next();
   EXPECT_EQ(identifier.kind(), Token::Kind::String);
   EXPECT_EQ(identifier.lexeme(), "hello");
@@ -12,7 +12,7 @@ TEST(LexerStrings, DoubleQuoteString) {
 }
 
 TEST(LexerStrings, SingleQuoteString) {
-  Lexer l = "'hello'";
+  Scanner l = "'hello'";
   Token identifier = l.next();
   EXPECT_EQ(identifier.kind(), Token::Kind::String);
   EXPECT_EQ(identifier.lexeme(), "hello");
@@ -22,7 +22,7 @@ TEST(LexerStrings, SingleQuoteString) {
 
 TEST(LexerStrings, EscapedDoubleString) {
   // escape the slash to escape the quote
-  Lexer l = "\"hel\\\"lo\"";
+  Scanner l = "\"hel\\\"lo\"";
   Token identifier = l.next();
   EXPECT_EQ(identifier.kind(), Token::Kind::String);
   EXPECT_EQ(identifier.lexeme(), "hel\\\"lo");
@@ -32,7 +32,7 @@ TEST(LexerStrings, EscapedDoubleString) {
 
 TEST(LexerStrings, EscapedSingleString) {
   // escape the slash to escape the quote
-  Lexer l = "'hel\\'lo'";
+  Scanner l = "'hel\\'lo'";
   Token identifier = l.next();
   EXPECT_EQ(identifier.kind(), Token::Kind::String);
   EXPECT_EQ(identifier.lexeme(), "hel\\'lo");
@@ -41,7 +41,7 @@ TEST(LexerStrings, EscapedSingleString) {
 }
 
 TEST(LexerStrings, DoubleInSingleString) {
-  Lexer l = "'\"hello\"'";
+  Scanner l = "'\"hello\"'";
   Token identifier = l.next();
   EXPECT_EQ(identifier.kind(), Token::Kind::String);
   EXPECT_EQ(identifier.lexeme(), "\"hello\"");
@@ -50,7 +50,7 @@ TEST(LexerStrings, DoubleInSingleString) {
 }
 
 TEST(LexerStrings, SingleInDoubleString) {
-  Lexer l = "\"'hello'\"";
+  Scanner l = "\"'hello'\"";
   Token identifier = l.next();
   EXPECT_EQ(identifier.kind(), Token::Kind::String);
   EXPECT_EQ(identifier.lexeme(), "'hello'");
@@ -59,7 +59,7 @@ TEST(LexerStrings, SingleInDoubleString) {
 }
 
 TEST(LexerStrings, MultiWordString) {
-  Lexer l = "'hello world'";
+  Scanner l = "'hello world'";
   Token s = l.next();
   EXPECT_EQ(s.kind(), Token::Kind::String);
   EXPECT_EQ(s.lexeme(), "hello world");
@@ -67,7 +67,7 @@ TEST(LexerStrings, MultiWordString) {
 }
 
 TEST(LexerStrings, OpenString) {
-  Lexer l = "'hello";
+  Scanner l = "'hello";
   Token s = l.next();
   EXPECT_EQ(s.kind(), Token::Kind::String);
   EXPECT_EQ(s.lexeme(), "hello");
