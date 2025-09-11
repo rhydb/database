@@ -1,4 +1,5 @@
 #pragma once
+
 #include "token.hpp"
 
 #include <memory>
@@ -6,18 +7,36 @@
 
 struct ExprVisitor;
 
-namespace Expr {
+namespace Expr
+{
+
+
+// can't template virtual functions, so use a union for the data we can return
+struct ReturnValue
+{
+  enum class Type
+  {
+    TokenType,
+    Void,
+  } type;
+  union
+  {
+    Token::Kind exprType;
+  } value;
+};
+
+#define EXPR_VOID {Expr::ReturnValue::Type::Void, {}}
 
 struct IExpr
 {
   virtual ~IExpr() {};
-  virtual void accept(ExprVisitor &visitor) = 0;
+  virtual ReturnValue accept(ExprVisitor &visitor) = 0;
 };
 
 struct Binary : public IExpr
 {
   Binary(std::unique_ptr<IExpr> left, Token op, std::unique_ptr<IExpr> right) : left(std::move(left)), op(op), right(std::move(right)) {}
-  void accept(ExprVisitor &visitor) override;
+  ReturnValue accept(ExprVisitor &visitor) override;
 
   std::unique_ptr<IExpr> left;
   Token op;
@@ -27,21 +46,21 @@ struct Binary : public IExpr
 struct Literal : public IExpr
 {
   Literal(Token value) : value(value) {}
-  void accept(ExprVisitor &visitor) override;
+  ReturnValue accept(ExprVisitor &visitor) override;
   Token value;
 };
 
 struct Grouping : public IExpr
 {
   Grouping(std::unique_ptr<IExpr> expr) : expr(std::move(expr)) {}
-  void accept(ExprVisitor &visitor) override;
+  ReturnValue accept(ExprVisitor &visitor) override;
   std::unique_ptr<IExpr> expr;
 };
 
 struct Unary : public IExpr
 {
   Unary(Token op, std::unique_ptr<IExpr> right) : op(op), right(std::move(right)) {}
-  void accept(ExprVisitor &visitor) override;
+  ReturnValue accept(ExprVisitor &visitor) override;
   Token op;
   std::unique_ptr<IExpr> right;
 };
@@ -55,7 +74,7 @@ struct ColumnDef
 struct Create : public IExpr
 {
   Create(std::string_view table_name, std::vector<ColumnDef> &&columns) : table_name(table_name), columns(std::move(columns)) {}
-  void accept(ExprVisitor &visitor) override;
+  ReturnValue accept(ExprVisitor &visitor) override;
   std::string_view table_name;
   std::vector<ColumnDef> columns;
 };

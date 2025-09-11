@@ -1,24 +1,24 @@
 #include "expression.hpp"
 #include "visitor.hpp"
 
-void Expr::Binary::accept(ExprVisitor &visitor)
+Expr::ReturnValue Expr::Binary::accept(ExprVisitor &visitor)
 {
-  visitor.visitBinary(*this);
+  return visitor.visitBinary(*this);
 }
-void Expr::Literal::accept(ExprVisitor &visitor)
+Expr::ReturnValue Expr::Literal::accept(ExprVisitor &visitor)
 {
-  visitor.visitLiteral(*this);
+  return visitor.visitLiteral(*this);
 }
-void Expr::Grouping::accept(ExprVisitor &visitor)
+Expr::ReturnValue Expr::Grouping::accept(ExprVisitor &visitor)
 {
-  visitor.visitGrouping(*this);
+  return visitor.visitGrouping(*this);
 }
-void Expr::Unary::accept(ExprVisitor &visitor)
+Expr::ReturnValue Expr::Unary::accept(ExprVisitor &visitor)
 {
-  visitor.visitUnary(*this);
+  return visitor.visitUnary(*this);
 }
 
-void Expr::Create::accept(ExprVisitor &visitor)
+Expr::ReturnValue Expr::Create::accept(ExprVisitor &visitor)
 {
-  visitor.visitCreate(*this);
+  return visitor.visitCreate(*this);
 }

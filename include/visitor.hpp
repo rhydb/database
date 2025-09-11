@@ -3,34 +3,26 @@
 #include <memory>
 #include <sstream>
 
-namespace Expr
-{
-struct IExpr;
-struct Binary;
-struct Literal;
-struct Grouping;
-struct Unary;
-struct Create;
-} // namespace Expr
+#include "expression.hpp"
 
 struct ExprVisitor
 {
-  virtual void visitBinary(const Expr::Binary &binary) = 0;
-  virtual void visitGrouping(const Expr::Grouping &grouping) = 0;
-  virtual void visitLiteral(const Expr::Literal &literal) = 0;
-  virtual void visitUnary(const Expr::Unary &unary) = 0;
-  virtual void visitCreate(const Expr::Create &unary) = 0;
+  virtual Expr::ReturnValue visitBinary(const Expr::Binary &binary) = 0;
+  virtual Expr::ReturnValue visitGrouping(const Expr::Grouping &grouping) = 0;
+  virtual Expr::ReturnValue visitLiteral(const Expr::Literal &literal) = 0;
+  virtual Expr::ReturnValue visitUnary(const Expr::Unary &unary) = 0;
+  virtual Expr::ReturnValue visitCreate(const Expr::Create &unary) = 0;
 };
 
 struct AstPrinter : public ExprVisitor
 {
   std::string print(const std::unique_ptr<Expr::IExpr> &e);
 
-  void visitBinary(const Expr::Binary &binary);
-  void visitGrouping(const Expr::Grouping &grouping);
-  void visitLiteral(const Expr::Literal &literal);
-  void visitUnary(const Expr::Unary &unary);
-  void visitCreate(const Expr::Create &unary);
+  Expr::ReturnValue visitBinary(const Expr::Binary &binary);
+  Expr::ReturnValue visitGrouping(const Expr::Grouping &grouping);
+  Expr::ReturnValue visitLiteral(const Expr::Literal &literal);
+  Expr::ReturnValue visitUnary(const Expr::Unary &unary);
+  Expr::ReturnValue visitCreate(const Expr::Create &unary);
 
 private:
   template <typename T>
