@@ -238,6 +238,13 @@ done:
   case DoubleQuoteString:
     [[fallthrough]];
   case SingleQuoteString:
+    if (c != '\'' && c != '"')
+    {
+      m_hadError = true;
+      // include the quote for the column
+      std::cerr << "Unterminated string, starting at " << m_line << ":" << startCol << std::endl;
+      return Token(Token::Kind::Unexpected, m_start, 1, m_line, m_col);
+    }
     return Token(Token::Kind::String, tokenStart,
                  m_start++ /* consume the end quote */, m_line, startCol);
     break;
@@ -253,7 +260,7 @@ done:
     return token;
   }
   default:
-    return Token(Token::Kind::Unexpected, tokenStart, m_start, m_line, startCol);
+    return Token(Token::Kind::Unexpected, tokenStart, m_start, m_line, m_col);
     break;
   }
 }

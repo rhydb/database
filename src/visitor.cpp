@@ -30,6 +30,18 @@ void AstPrinter::visitUnary(const Expr::Unary &unary)
   parenthesise(lexeme.c_str(), unary.right);
 }
 
+void AstPrinter::visitCreate(const Expr::Create &create)
+{
+
+  output << "create " << create.table_name;
+  output << "(";
+  for (const Expr::ColumnDef &col : create.columns)
+  {
+    output << " " << col.name.lexeme() << ":" << col.type.lexeme() << ", ";
+  }
+  output << ")";
+}
+
 template <typename... Es>
 void AstPrinter::parenthesise(const char *name,
                               const std::unique_ptr<Expr::IExpr> &e1, const Es &...es)

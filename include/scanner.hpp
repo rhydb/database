@@ -9,7 +9,6 @@ public:
 
   Token next() noexcept;
   Token peekToken() noexcept;
-  Token expect(Token::Kind kind, const char *message);
   void goBack();
   bool hadError() const noexcept { return m_hadError; }
 

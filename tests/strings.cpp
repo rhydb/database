@@ -67,9 +67,9 @@ TEST(ScannerStrings, MultiWordString) {
 }
 
 TEST(ScannerStrings, OpenString) {
-  Scanner l = "'hello";
-  Token s = l.next();
-  EXPECT_EQ(s.kind(), Token::Kind::String);
-  EXPECT_EQ(s.lexeme(), "hello");
-  EXPECT_EQ(l.next().kind(), Token::Kind::End);
+  Scanner s = "'hello";
+  Token t = s.next();
+  EXPECT_EQ(s.hadError(), true);
+  EXPECT_EQ(t.kind(), Token::Kind::Unexpected);
+  EXPECT_EQ(s.next().kind(), Token::Kind::End);
 }

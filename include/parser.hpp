@@ -5,15 +5,20 @@
 #include <memory>
 
 /*
-expression     → equality ;
-equality       → comparison ( ( "!=" | "==" ) comparison )* ;
-comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
-term           → factor ( ( "-" | "+" ) factor )* ;
-factor         → unary ( ( "/" | "*" ) unary )* ;
-unary          → ( "!" | "-" ) unary
-               | primary ;
-primary        → NUMBER | STRING | "true" | "false" | "nil"
-               | "(" expression ")" ;
+statement      -> (ddl) ;
+ddl            -> "create" "table" identifier create_def
+create_def     -> "(" column_def_list ")"
+column_def_list -> column_def "," column_def_list | column_def
+column_def     -> identifier type
+expression     -> equality
+equality       -> comparison ( ( "!=" | "==" ) comparison )*
+comparison     -> term ( ( ">" | ">=" | "<" | "<=" ) term )*
+term           -> factor ( ( "-" | "+" ) factor )*
+factor         -> unary ( ( "/" | "*" ) unary )*
+unary          -> ( "!" | "-" ) unary
+               -> primary
+primary        -> NUMBER | STRING | "true" | "false" | "nil"
+               | "(" expression ")"
 */
 
 class Parser
@@ -24,6 +29,10 @@ public:
 
 private:
   void error(const Token &t, const char *msg);
+  std::unique_ptr<Expr::IExpr> statement();
+  std::unique_ptr<Expr::IExpr> ddl();
+  Expr::ColumnDef column_def();
+  std::vector<Expr::ColumnDef> column_def_list();
   std::unique_ptr<Expr::IExpr> expression();
   std::unique_ptr<Expr::IExpr> equality();
   std::unique_ptr<Expr::IExpr> comparison();

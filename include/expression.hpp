@@ -2,6 +2,7 @@
 #include "token.hpp"
 
 #include <memory>
+#include <vector>
 
 struct ExprVisitor;
 
@@ -43,6 +44,20 @@ struct Unary : public IExpr
   void accept(ExprVisitor &visitor) override;
   Token op;
   std::unique_ptr<IExpr> right;
+};
+
+struct ColumnDef
+{
+  Token name;
+  Token type;
+};
+
+struct Create : public IExpr
+{
+  Create(std::string_view table_name, std::vector<ColumnDef> &&columns) : table_name(table_name), columns(std::move(columns)) {}
+  void accept(ExprVisitor &visitor) override;
+  std::string_view table_name;
+  std::vector<ColumnDef> columns;
 };
 
 }

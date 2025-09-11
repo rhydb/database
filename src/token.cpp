@@ -1,8 +1,9 @@
 #include "token.hpp"
 
-static inline constexpr const char *kindToString(Token::Kind kind)
+
+static const char* kindToString(const Token::Kind &k)
 {
-  switch (kind)
+  switch (k)
   {
   #define X(kind, str, is_kw) case Token::Kind::kind: return str;
 #include "token_list.hpp"
@@ -11,13 +12,18 @@ static inline constexpr const char *kindToString(Token::Kind kind)
   return "Unknown";
 }
 
-std::ostream &operator<<(std::ostream &os, const Token::Kind &kind)
+const char* Token::toString() const
 {
-  return os << kindToString(kind);
+  return kindToString(m_kind);
+}
+
+std::ostream &operator<<(std::ostream &os, const Token::Kind &k)
+{
+  return os << kindToString(k);
 }
 
 std::ostream &operator<<(std::ostream &os, const Token &t)
 {
   // e.g. LeftParen('(')@12
-  return os <<  kindToString(t.kind()) << "('" << t.lexeme() << "')@" << t.line() << ":" << t.col(); 
+  return os <<  t.toString() << "('" << t.lexeme() << "')@" << t.line() << ":" << t.col(); 
 }

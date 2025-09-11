@@ -45,9 +45,28 @@ struct Token
     return is(k1) || isOneOf(k2, ks...);
   }
 
+  template<class S, typename ...Ks>
+  void expectOrThrow(S message, Token::Kind kind, Ks... ks)
+  {
+    if (!isOneOf(kind, ks...))
+    {
+      throw std::runtime_error(message);
+    }
+  }
+
+  template<class S>
+  void expectOrThrow(S message, Token::Kind kind)
+  {
+    if (!is(kind))
+    {
+      throw std::runtime_error(message);
+    }
+  }
+
   std::string_view lexeme() const noexcept { return m_lexeme; }
   int line() const noexcept { return m_line; }
   int col() const noexcept { return m_col; }
+  const char* toString() const;
 
   union
   {

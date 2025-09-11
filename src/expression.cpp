@@ -17,3 +17,8 @@ void Expr::Unary::accept(ExprVisitor &visitor)
 {
   visitor.visitUnary(*this);
 }
+
+void Expr::Create::accept(ExprVisitor &visitor)
+{
+  visitor.visitCreate(*this);
+}
