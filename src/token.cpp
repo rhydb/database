@@ -1,7 +1,6 @@
 #include "token.hpp"
 
-
-static const char* kindToString(const Token::Kind &k)
+const char* kindToString(const Token::Kind &k)
 {
   switch (k)
   {
@@ -25,5 +24,11 @@ std::ostream &operator<<(std::ostream &os, const Token::Kind &k)
 std::ostream &operator<<(std::ostream &os, const Token &t)
 {
   // e.g. LeftParen('(')@12
-  return os <<  t.toString() << "('" << t.lexeme() << "')@" << t.line() << ":" << t.col(); 
+  return os <<  t.toString() << "('" << t.lexeme() << "')@" << t.location(); 
+}
+
+std::ostream &operator<<(std::ostream &os, const Token::Location &location)
+{
+  // e.g 4:12
+  return os <<  location.line << ":" << location.col;; 
 }

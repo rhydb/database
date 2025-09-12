@@ -21,8 +21,8 @@ private:
   char peek() const noexcept { return *m_start; }
   char get() noexcept;
   Token charToken(Token::Kind kind) noexcept;
-  Token identifierOrReserved(const char *start, const char *end, int line, int col) const noexcept;
-  Token matchOr(Token::Kind fallback, char match, Token::Kind onMatch, int col) noexcept;
+  Token identifierOrReserved(const char *start, const char *end, Token::Location location) const noexcept;
+  Token matchOr(Token::Kind fallback, char match, Token::Kind onMatch, Token::Location location) noexcept;
 
   bool isNonEscaped(char c, char end, bool &escapeNext) const noexcept;
   bool isWhiteSpace(char c) const noexcept;

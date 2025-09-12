@@ -16,7 +16,7 @@ struct ReturnValue
 {
   enum class Type
   {
-    TokenType,
+    ExprType,
     Void,
   } type;
   union

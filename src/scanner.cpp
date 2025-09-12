@@ -66,7 +66,7 @@ Token Scanner::nextToken() noexcept
     get();
   }
 
-  int startCol = m_col;
+  Token::Location startLocation = {m_line, m_col};
 
   // more in depth state for reading mutli-character tokens
   enum Where
@@ -83,7 +83,7 @@ Token Scanner::nextToken() noexcept
   switch (classifyChar(c))
   {
   case CharacterKind::End:
-    return Token(Token::Kind::End, m_start, 1, m_line, m_col);
+    return Token(Token::Kind::End, m_start, 1, {m_line, m_col});
   case CharacterKind::Puncutation:
     switch (c)
     {
@@ -102,14 +102,14 @@ Token Scanner::nextToken() noexcept
     case '-':
       return charToken(Token::Kind::Minus);
     case '=':
-      return matchOr(Token::Kind::Equals, '=', Token::Kind::DoubleEquals, startCol);
+      return matchOr(Token::Kind::Equals, '=', Token::Kind::DoubleEquals, startLocation);
     case '!':
-      return matchOr(Token::Kind::Bang, '=', Token::Kind::BangEquals, startCol);
+      return matchOr(Token::Kind::Bang, '=', Token::Kind::BangEquals, startLocation);
     case '<':
-      return matchOr(Token::Kind::LessThan, '=', Token::Kind::LessThanEqual, startCol);
+      return matchOr(Token::Kind::LessThan, '=', Token::Kind::LessThanEqual, startLocation);
     case '>':
       return matchOr(Token::Kind::GreaterThan, '=',
-                     Token::Kind::GreaterThanEqual, startCol);
+                     Token::Kind::GreaterThanEqual, startLocation);
     case '(':
       return charToken(Token::Kind::OpenParen);
     case ')':
@@ -139,7 +139,7 @@ Token Scanner::nextToken() noexcept
     where = Number;
     break;
   default:
-    return Token(Token::Kind::Unexpected, m_start, 1, m_line, m_col);
+    return Token(Token::Kind::Unexpected, m_start, 1, {m_line, m_col});
   }
 
   const char *tokenStart = m_start;
@@ -242,25 +242,25 @@ done:
     {
       m_hadError = true;
       // include the quote for the column
-      std::cerr << "Unterminated string, starting at " << m_line << ":" << startCol << std::endl;
-      return Token(Token::Kind::Unexpected, m_start, 1, m_line, m_col);
+      std::cerr << "Unterminated string, starting at " << startLocation << std::endl;
+      return Token(Token::Kind::Unexpected, m_start, 1, {m_line, m_col});
     }
     return Token(Token::Kind::String, tokenStart,
-                 m_start++ /* consume the end quote */, m_line, startCol);
+                 m_start++ /* consume the end quote */, startLocation);
     break;
   case Identifier:
-    return identifierOrReserved(tokenStart, m_start, m_line, startCol);
+    return identifierOrReserved(tokenStart, m_start, startLocation);
     break;
   case Number:
     [[fallthrough]];
   case Decimal:
   {
-    Token token = Token(Token::Kind::Number, tokenStart, m_start, m_line, startCol);
+    Token token = Token(Token::Kind::Number, tokenStart, m_start, startLocation);
     token.value.number = std::stod(token.lexeme().data());
     return token;
   }
   default:
-    return Token(Token::Kind::Unexpected, tokenStart, m_start, m_line, m_col);
+    return Token(Token::Kind::Unexpected, tokenStart, m_start, {m_line, m_col});
     break;
   }
 }
@@ -281,7 +281,7 @@ inline constexpr ReservedIdentifier reserved[] = {
 };
 
 Token Scanner::identifierOrReserved(const char *start,
-                                    const char *end, int line, int col) const noexcept
+                                    const char *end, Token::Location location) const noexcept
 {
   std::string_view lexeme = std::string_view(start, end - start);
   const size_t nReserved = sizeof(reserved) / sizeof(reserved[0]);
@@ -290,10 +290,10 @@ Token Scanner::identifierOrReserved(const char *start,
 
     if (lexeme.compare(reserved[i].str) == 0)
     {
-      return Token(reserved[i].kind, start, end, line, col);
+      return Token(reserved[i].kind, start, end, location);
     }
   }
-  return Token(Token::Kind::Identifier, start, end, line, col);
+  return Token(Token::Kind::Identifier, start, end, location);
 }
 
 Token Scanner::peekToken() noexcept
@@ -312,21 +312,21 @@ bool Scanner::isWhiteSpace(char c) const noexcept { return c > 0 && c <= ' '; }
 
 Token Scanner::charToken(Token::Kind kind) noexcept
 {
-  return Token(kind, m_start++, 1, m_line, m_col);
+  return Token(kind, m_start++, 1, {m_line, m_col});
 }
 
 // consumes the current character and checks the following character against
 // match if equal consumes match and returns onMatch otherwise returns fallback
 Token Scanner::matchOr(Token::Kind fallback, char match,
-                       Token::Kind onMatch, int col) noexcept
+                       Token::Kind onMatch, Token::Location location) noexcept
 {
   const char *tokenStart = m_start++;
   if (peek() == match)
   {
-    return Token(onMatch, tokenStart, ++m_start, m_line, col);
+    return Token(onMatch, tokenStart, ++m_start, location);
   }
 
-  return Token(fallback, tokenStart, 1, m_line, col);
+  return Token(fallback, tokenStart, 1, location);
 }
 
 bool Scanner::isNonEscaped(char c, char end, bool &escapeNext) const noexcept

@@ -5,6 +5,12 @@
 
 struct Token
 {
+  struct Location
+  {
+    int line, col;
+
+  };
+
   enum class Kind
   {
     #define X(kind, str, is_kw) kind,
@@ -21,12 +27,12 @@ struct Token
   {
     value.number = number;
   }
-  Token(Kind kind, const char *start, std::size_t len, int line = 0, int col = 0) noexcept
-      : m_kind(kind), m_lexeme(start, len), m_line(line), m_col(col)
+  Token(Kind kind, const char *start, std::size_t len, Location location = {}) noexcept
+      : m_kind(kind), m_lexeme(start, len), m_location(location)
   {
   }
-  Token(Kind kind, const char *start, const char *end, int line = 0, int col = 0) noexcept
-      : m_kind(kind), m_lexeme(start, end - start), m_line(line), m_col(col)
+  Token(Kind kind, const char *start, const char *end, Location location = {}) noexcept
+      : m_kind(kind), m_lexeme(start, end - start), m_location(location)
   {
   }
 
@@ -64,8 +70,8 @@ struct Token
   }
 
   std::string_view lexeme() const noexcept { return m_lexeme; }
-  int line() const noexcept { return m_line; }
-  int col() const noexcept { return m_col; }
+
+  const Location& location() const noexcept { return m_location; }
   const char* toString() const;
 
   union
@@ -76,8 +82,11 @@ struct Token
 private:
   Kind m_kind;
   std::string_view m_lexeme;
-  int m_line, m_col;
+  Location m_location;
 };
 
 std::ostream &operator<<(std::ostream &os, const Token &t);
 std::ostream &operator<<(std::ostream &os, const Token::Kind &kind);
+std::ostream &operator<<(std::ostream &os, const Token::Location &location);
+
+const char* kindToString(const Token::Kind &k);

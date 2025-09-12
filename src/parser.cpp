@@ -1,8 +1,9 @@
 #include "parser.hpp"
+#include "type_checker.hpp"
 
 void Parser::error(const Token &t, const char *msg)
 {
-  std::cerr << t.line() << ":" << t.col() << " " << msg << std::endl;
+  std::cerr << t.location() << " " << msg << std::endl;
   throw std::exception();
 }
 
@@ -10,7 +11,14 @@ std::unique_ptr<Expr::IExpr> Parser::parse()
 {
   try
   {
-    return statement();
+    auto expr = expression();
+    TypeChecker tc;
+    if (tc.check(expr))
+    {
+      std::cerr << "Type check failed" << std::endl;
+      return nullptr;
+    }
+    return expr;
   }
   catch (std::exception &e)
   {
