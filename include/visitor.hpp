@@ -21,7 +21,7 @@ struct LeafVisitor : public ExprVisitor
    {
      binary.left->accept(*this); 
      binary.right->accept(*this); 
-     return EXPR_VOID;
+     return std::monostate{};
    }
    Expr::ReturnValue visitGrouping(const Expr::Grouping &grouping)
    {
@@ -31,7 +31,7 @@ struct LeafVisitor : public ExprVisitor
    {
       return unary.right->accept(*this);
    }
-   Expr::ReturnValue visitCreate(const Expr::Create &unary) { UNUSED(unary); return EXPR_VOID; };
+   Expr::ReturnValue visitCreate(const Expr::Create &unary) { UNUSED(unary); return std::monostate{}; };
    Expr::ReturnValue visitLiteral(const Expr::Literal &literal) = 0;
 };
 

@@ -1,5 +1,5 @@
 
-#include "type_checker.hpp"
+#include "ast.hpp"
 #include <cassert>
 
 bool TypeChecker::check(const std::unique_ptr<Expr::IExpr> &e)
@@ -11,29 +11,26 @@ bool TypeChecker::check(const std::unique_ptr<Expr::IExpr> &e)
 
 Expr::ReturnValue TypeChecker::visitLiteral(const Expr::Literal &literal)
 {
-  return {Expr::ReturnValue::Type::ExprType, {literal.value.kind()}};
+  return literal.value.kind();
 }
 
 Expr::ReturnValue TypeChecker::visitBinary(const Expr::Binary &binary)
 {
-  const Expr::ReturnValue leftValue = binary.left->accept(*this);
-  const Expr::ReturnValue rightValue = binary.right->accept(*this);
-
-
-  if (leftValue.type != Expr::ReturnValue::Type::ExprType)
+  // other errors don't matter we can stil check here
+  // just make sure we dont have an error also
+  bool prevHadError = m_hadError;
+  m_hadError = false;
+  const auto leftResult = binary.left->accept(*this);
+  const auto rightResult = binary.right->accept(*this);
+  if (m_hadError)
   {
-    assert(m_hadError == true && "No error but return value is not ExprType");
-    return EXPR_VOID;
+    m_hadError = true;
+    return std::monostate{};
   }
+  m_hadError = prevHadError;
 
-  if (rightValue.type != Expr::ReturnValue::Type::ExprType)
-  {
-    assert(m_hadError == true && "No error but return value is not ExprType");
-    return EXPR_VOID;
-  }
-
-  const Token::Kind leftKind = leftValue.value.exprType;
-  const Token::Kind rightKind = rightValue.value.exprType;
+  const auto leftKind = std::get<Token::Kind>(leftResult);
+  const auto rightKind = std::get<Token::Kind>(rightResult);
 
   if (leftKind != rightKind)
   {
@@ -45,10 +42,10 @@ Expr::ReturnValue TypeChecker::visitBinary(const Expr::Binary &binary)
     std::cerr << rightKind;
     std::cerr << std::endl;
 
-    return EXPR_VOID;
+    return std::monostate{};
   }
 
-  return {Expr::ReturnValue::Type::ExprType, {leftKind}};
+  return leftKind;
 }
 
 Expr::ReturnValue TypeChecker::visitGrouping(const Expr::Grouping &grouping)
@@ -58,23 +55,27 @@ Expr::ReturnValue TypeChecker::visitGrouping(const Expr::Grouping &grouping)
 
 Expr::ReturnValue TypeChecker::visitUnary(const Expr::Unary &unary)
 {
-  const Expr::ReturnValue exprValue = unary.right->accept(*this);
-  if (exprValue.type != Expr::ReturnValue::Type::ExprType)
+  // other errors don't matter we can stil check here
+  // just make sure we dont have an error also
+  bool prevHadError = m_hadError;
+  m_hadError = false;
+  const auto result = unary.right->accept(*this);
+  if (m_hadError)
   {
-    assert(m_hadError == true && "No error but return value is not ExprType");
-    return EXPR_VOID;
+    m_hadError = true;
+    return std::monostate{};
   }
+  m_hadError = prevHadError;
 
-  const Token::Kind kind = exprValue.value.exprType;
-
+  const auto kind = std::get<Token::Kind>(result);
   if (kind != Token::Kind::Number)
   {
     m_hadError = true;
     std::cerr << unary.op.location() << " ";
     std::cerr << "Cannot perform " << unary.op.toString();
     std::cerr << " to " << kind << std::endl;
-    return EXPR_VOID;
+    return std::monostate{};
   }
 
-  return {Expr::ReturnValue::Type::ExprType, {kind}};
+  return kind;
 }

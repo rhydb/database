@@ -11,19 +11,19 @@ Expr::ReturnValue AstPrinter::visitBinary(const Expr::Binary &binary)
 {
   std::string lexeme = std::string(binary.op.lexeme());
   parenthesise(lexeme.c_str(), binary.left, binary.right);
-  return EXPR_VOID;
+  return std::monostate{};
 }
 
 Expr::ReturnValue AstPrinter::visitGrouping(const Expr::Grouping &grouping)
 {
   parenthesise("group", grouping.expr);
-  return EXPR_VOID;
+  return std::monostate{};
 }
 
 Expr::ReturnValue AstPrinter::visitLiteral(const Expr::Literal &literal)
 {
   output << literal.value.lexeme();
-  return EXPR_VOID;
+  return std::monostate{};
 }
 
 Expr::ReturnValue AstPrinter::visitUnary(const Expr::Unary &unary)
@@ -31,7 +31,7 @@ Expr::ReturnValue AstPrinter::visitUnary(const Expr::Unary &unary)
 
   std::string lexeme = std::string(unary.op.lexeme());
   parenthesise(lexeme.c_str(), unary.right);
-  return EXPR_VOID;
+  return std::monostate{};
 }
 
 Expr::ReturnValue AstPrinter::visitCreate(const Expr::Create &create)
@@ -44,7 +44,7 @@ Expr::ReturnValue AstPrinter::visitCreate(const Expr::Create &create)
     output << " " << col.name.lexeme() << ":" << col.type.token.lexeme() << ", ";
   }
   output << ")";
-  return EXPR_VOID;
+  return std::monostate{};
 }
 
 template <typename... Es>

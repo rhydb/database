@@ -1,31 +1,22 @@
 #pragma once
 
 #include "token.hpp"
+#include "bytecode.hpp"
 
 #include <memory>
+#include <variant>
 #include <vector>
 
 struct ExprVisitor;
 
 namespace Expr
 {
-
-
-// can't template virtual functions, so use a union for the data we can return
-struct ReturnValue
-{
-  enum class Type
-  {
-    ExprType,
-    Void,
-  } type;
-  union
-  {
-    Token::Kind exprType;
-  } value;
-};
-
-#define EXPR_VOID {Expr::ReturnValue::Type::Void, {}}
+// can't template virtual functions, so use this
+// void
+// expression type
+// instruction
+// instruction chunk
+using ReturnValue = std::variant<std::monostate, Token::Kind, Instruction, std::vector<Instruction>>;
 
 struct IExpr
 {

@@ -1,7 +1,7 @@
 #include <optional>
 
 #include "parser.hpp"
-#include "type_checker.hpp"
+#include "ast.hpp"
 
 void Parser::error(const Token &t, const char *msg)
 {
@@ -13,7 +13,7 @@ std::unique_ptr<Expr::IExpr> Parser::parse()
 {
   try
   {
-    auto expr = statement();
+    auto expr = expression();
     TypeChecker tc;
     if (tc.check(expr))
     {
