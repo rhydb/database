@@ -67,8 +67,18 @@ struct Unary : public IExpr
 
 struct ColumnDef
 {
+  enum class Type
+  {
+    Integer,
+    String,
+  };
+
   Token name;
-  Token type;
+  struct
+  {
+    Token token;
+    Type type;
+  } type;
 };
 
 struct Create : public IExpr

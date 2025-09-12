@@ -78,4 +78,3 @@ Expr::ReturnValue TypeChecker::visitUnary(const Expr::Unary &unary)
 
   return {Expr::ReturnValue::Type::ExprType, {kind}};
 }
-

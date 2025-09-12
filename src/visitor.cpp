@@ -41,7 +41,7 @@ Expr::ReturnValue AstPrinter::visitCreate(const Expr::Create &create)
   output << "(";
   for (const Expr::ColumnDef &col : create.columns)
   {
-    output << " " << col.name.lexeme() << ":" << col.type.lexeme() << ", ";
+    output << " " << col.name.lexeme() << ":" << col.type.token.lexeme() << ", ";
   }
   output << ")";
   return EXPR_VOID;

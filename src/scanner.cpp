@@ -265,12 +265,7 @@ done:
   }
 }
 
-struct ReservedIdentifier
-{
-  const char *str;
-  Token::Kind kind;
-};
-inline constexpr ReservedIdentifier reserved[] = {
+inline constexpr std::pair<const char*, Token::Kind> reserved[] = {
 #define RESERVED_true(str, kind) {str, Token::Kind::kind},
 #define RESERVED_false(str, kind) // empty
 #define X(kind, str, is_kw) RESERVED_##is_kw(str, kind)
@@ -284,13 +279,11 @@ Token Scanner::identifierOrReserved(const char *start,
                                     const char *end, Token::Location location) const noexcept
 {
   std::string_view lexeme = std::string_view(start, end - start);
-  const size_t nReserved = sizeof(reserved) / sizeof(reserved[0]);
-  for (size_t i = 0; i < nReserved; i++)
+  for (const auto r : reserved)
   {
-
-    if (lexeme.compare(reserved[i].str) == 0)
+    if (lexeme.compare(r.first) == 0)
     {
-      return Token(reserved[i].kind, start, end, location);
+      return Token(r.second, start, end, location);
     }
   }
   return Token(Token::Kind::Identifier, start, end, location);

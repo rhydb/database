@@ -1,17 +1,19 @@
+#include <optional>
+
 #include "parser.hpp"
 #include "type_checker.hpp"
 
 void Parser::error(const Token &t, const char *msg)
 {
   std::cerr << t.location() << " " << msg << std::endl;
-  throw std::exception();
+  throw std::runtime_error(msg);
 }
 
 std::unique_ptr<Expr::IExpr> Parser::parse()
 {
   try
   {
-    auto expr = expression();
+    auto expr = statement();
     TypeChecker tc;
     if (tc.check(expr))
     {
@@ -53,13 +55,42 @@ std::unique_ptr<Expr::IExpr> Parser::ddl()
   return nullptr;
 }
 
+std::optional<Expr::ColumnDef::Type> resolveColumnType(const std::string_view &type_str)
+{
+  // we can check these now wihtout having to travel the tree
+  static const std::pair<const char*, Expr::ColumnDef::Type> types[] = {
+    {"integer", Expr::ColumnDef::Type::Integer},
+    {"string", Expr::ColumnDef::Type::String},
+  };
+
+  for (const auto t : types)
+  {
+    if (type_str.compare(t.first) == 0)
+    {
+      return t.second;
+    }
+  }
+
+  return std::nullopt;
+}
+
 Expr::ColumnDef Parser::column_def()
 {
-  Token col_name = m_scanner.next();
-  col_name.expectOrThrow(std::string("Expected column name, instead saw ") + col_name.toString(), Token::Kind::Identifier); 
-  Token col_type = m_scanner.next();
-  col_type.expectOrThrow(std::string("Expected column type, instead saw ") + col_type.toString(), Token::Kind::Identifier); 
-  return Expr::ColumnDef{col_name, col_type};
+  const Token name = m_scanner.next();
+  name.expectOrThrow((std::stringstream()
+      << name.location() << " Expected column name, instead saw " << name.toString()
+      ).str(), Token::Kind::Identifier);
+  const Token type = m_scanner.next();
+  type.expectOrThrow((std::stringstream()
+      << type.location() << " Expected column type, instead saw " << type.toString()
+      ).str(), Token::Kind::Identifier); 
+
+  auto colType = resolveColumnType(type.lexeme());
+  if (!colType)
+  {
+    throw std::runtime_error((std::stringstream() << type.location() << " Unknown column type: " << type.lexeme()).str());
+  }
+  return Expr::ColumnDef{name, {type, colType.value()}};
 }
 
 std::vector<Expr::ColumnDef> Parser::column_def_list()

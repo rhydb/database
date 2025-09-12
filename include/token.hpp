@@ -52,7 +52,7 @@ struct Token
   }
 
   template<class S, typename ...Ks>
-  void expectOrThrow(S message, Token::Kind kind, Ks... ks)
+  void expectOrThrow(S message, Token::Kind kind, Ks... ks) const
   {
     if (!isOneOf(kind, ks...))
     {
@@ -61,7 +61,7 @@ struct Token
   }
 
   template<class S>
-  void expectOrThrow(S message, Token::Kind kind)
+  void expectOrThrow(S message, Token::Kind kind) const
   {
     if (!is(kind))
     {

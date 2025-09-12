@@ -1,6 +1,7 @@
 #pragma once
 
 #include "visitor.hpp"
+#include "common.hpp"
 
 struct TypeChecker : public ExprVisitor
 {
@@ -9,7 +10,7 @@ struct TypeChecker : public ExprVisitor
   Expr::ReturnValue visitGrouping(const Expr::Grouping &grouping);
   Expr::ReturnValue visitLiteral(const Expr::Literal &literal);
   Expr::ReturnValue visitUnary(const Expr::Unary &unary);
-  Expr::ReturnValue visitCreate(const Expr::Create &t) { (void)t; return EXPR_VOID; }
+  Expr::ReturnValue visitCreate(const Expr::Create &t) { UNUSED(t); return EXPR_VOID; }
 
 private:
   bool m_hadError = false;
