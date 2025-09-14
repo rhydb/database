@@ -20,6 +20,15 @@ std::unique_ptr<Expr::IExpr> Parser::parse()
       std::cerr << "Type check failed" << std::endl;
       return nullptr;
     }
+
+    Bytecode bc;
+    const auto instructions = bc.compile(expr);
+    
+    for (const auto &i : instructions)
+    {
+      std::cout << i << std::endl;
+    }
+
     return expr;
   }
   catch (std::exception &e)

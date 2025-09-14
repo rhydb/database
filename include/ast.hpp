@@ -28,7 +28,4 @@ struct Bytecode : public ExprVisitor
   Expr::ReturnValue visitLiteral(const Expr::Literal &literal);
   Expr::ReturnValue visitUnary(const Expr::Unary &unary);
   Expr::ReturnValue visitCreate(const Expr::Create &t) { UNUSED(t); return std::monostate{}; }
-
-private:
-  bool m_hadError = false;
 };
