@@ -1,6 +1,7 @@
 #include "ast.hpp"
 
 #include <cassert>
+#include <variant>
 
 
 Chunk Bytecode::compile(const std::unique_ptr<Expr::IExpr> &e)
@@ -12,18 +13,22 @@ Chunk Bytecode::compile(const std::unique_ptr<Expr::IExpr> &e)
 
 Expr::ReturnValue Bytecode::visitLiteral(const Expr::Literal &literal)
 {
-  if (literal.value.is(Token::Kind::String))
+  switch (literal.value.kind())
   {
+  case Token::Kind::String:
     return Chunk{ Instruction(Instruction::Opcode::PushString, literal.value.lexeme()) };
-  }
 
-  if (literal.value.is(Token::Kind::Number))
-  {
+case Token::Kind::Number:
     return Chunk{ Instruction(Instruction::Opcode::PushNumber, literal.value.value.number) };
-  }
 
+case Token::Kind::True:
+    return Chunk{ Instruction(Instruction::Opcode::PushNumber, 1)};
+  case Token::Kind::False:
+    return Chunk{ Instruction(Instruction::Opcode::PushNumber, 0)};
+default:
   assert(false && "Unknown literal type");
   return Chunk{ Instruction(Instruction::Opcode::PushNumber, 0) };
+  }
 }
 
 Expr::ReturnValue Bytecode::visitBinary(const Expr::Binary &binary)
@@ -52,6 +57,12 @@ Expr::ReturnValue Bytecode::visitBinary(const Expr::Binary &binary)
       break;
     case Token::Kind::Star:
       chunk.push_back(Instruction(Instruction::Opcode::Mul));
+      break;
+    case Token::Kind::And:
+      chunk.push_back(Instruction(Instruction::Opcode::And));
+      break;
+    case Token::Kind::Or:
+      chunk.push_back(Instruction(Instruction::Opcode::Or));
       break;
     default:
       assert(false && "Unknown operator in binary");
@@ -90,8 +101,6 @@ Expr::ReturnValue Bytecode::visitUnary(const Expr::Unary &unary)
   return chunk;
 }
 
-
-
 std::ostream &operator<<(std::ostream &os, const Instruction &i)
 {
   static const char *opcodes[] = {
@@ -102,11 +111,17 @@ std::ostream &operator<<(std::ostream &os, const Instruction &i)
     [Instruction::Opcode::Div] = "Div",
     [Instruction::Opcode::Mul] = "Mul",
     [Instruction::Opcode::Not] = "Not",
+    [Instruction::Opcode::Or] = "Or",
+    [Instruction::Opcode::And] = "And",
   };
   os << opcodes[i.op] << '{';
   if (i.op == Instruction::Opcode::PushString)
   {
-    return os << i.str << '}';
+    return os << std::get<std::string_view>(i.params) << '}';
   }
-  return os << i.p1 << '}';
+  if (i.op == Instruction::Opcode::PushNumber)
+  {
+    return os << std::get<double>(i.params) << '}';
+  }
+  return os << '}';
 }

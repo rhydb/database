@@ -22,3 +22,19 @@ Expr::ReturnValue Expr::Create::accept(ExprVisitor &visitor)
 {
   return visitor.visitCreate(*this);
 }
+
+
+std::ostream &operator<<(std::ostream &os, const Expr::Type &type)
+{
+  switch (type)
+  {
+    case Expr::Type::Number:
+      return os << "Number";
+    case Expr::Type::Bool:
+      return os << "Bool";
+    case Expr::Type::String:
+      return os << "String";
+    case Expr::Type::Unknown:
+      return os << "Unkown";
+  }
+}

@@ -25,7 +25,7 @@ class Parser
 {
 public:
   Parser(Scanner &scanner) : m_scanner(scanner) {}
-  std::unique_ptr<Expr::IExpr> parse();
+  Chunk parse();
 
 private:
   void error(const Token &t, const char *msg);

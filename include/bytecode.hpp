@@ -3,6 +3,7 @@
 #include <vector>
 #include <iostream>
 #include <string_view>
+#include <variant>
 
 struct Instruction
 {
@@ -15,13 +16,15 @@ struct Instruction
     Div, // push(pop / pop)
     Mul, // push(pop * pop)
     Not, // push(!pop)
+    Or,
+    And,
   } op;
 
-  Instruction(Opcode op, int p1 = 0) : op(op), p1(p1) {}
-  Instruction(Opcode op, std::string_view str) : op(op), str(str) {}
+  Instruction(Opcode op, double p1 = 0) : op(op), params(p1) {}
+  Instruction(Opcode op, std::string_view str) : op(op), params(str) {}
 
-  double p1;
-  std::string_view str;
+  using Params = std::variant<double, std::string_view>;
+  Params params;
 };
 
 using Chunk = std::vector<Instruction>;

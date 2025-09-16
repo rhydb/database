@@ -9,16 +9,18 @@ void Parser::error(const Token &t, const char *msg)
   throw std::runtime_error(msg);
 }
 
-std::unique_ptr<Expr::IExpr> Parser::parse()
+Chunk Parser::parse()
 {
   try
   {
     auto expr = expression();
+    AstPrinter ap = AstPrinter();
+    std::cout << ap.print(expr) << std::endl;
     TypeChecker tc;
     if (tc.check(expr))
     {
       std::cerr << "Type check failed" << std::endl;
-      return nullptr;
+      return {};
     }
 
     Bytecode bc;
@@ -29,12 +31,12 @@ std::unique_ptr<Expr::IExpr> Parser::parse()
       std::cout << i << std::endl;
     }
 
-    return expr;
+    return instructions;
   }
   catch (std::exception &e)
   {
     std::cerr << e.what() << std::endl;
-    return nullptr;
+    return {};
   }
 }
 
@@ -160,7 +162,8 @@ std::unique_ptr<Expr::IExpr> Parser::comparison()
   for (const Token &t : m_scanner)
   {
     if (!t.isOneOf(Token::Kind::GreaterThan, Token::Kind::GreaterThanEqual,
-                   Token::Kind::LessThan, Token::Kind::LessThanEqual))
+                   Token::Kind::LessThan, Token::Kind::LessThanEqual,
+                   Token::Kind::Or, Token::Kind::And))
     {
       m_scanner.goBack();
       break;

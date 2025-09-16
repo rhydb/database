@@ -16,7 +16,14 @@ namespace Expr
 // expression type
 // instruction
 // instruction chunk
-using ReturnValue = std::variant<std::monostate, Token::Kind, Instruction, std::vector<Instruction>>;
+enum class Type
+{
+  Number,
+  Bool,
+  String,
+  Unknown,
+};
+using ReturnValue = std::variant<std::monostate, Type, Token::Kind, Instruction, std::vector<Instruction>>;
 
 struct IExpr
 {
@@ -81,3 +88,6 @@ struct Create : public IExpr
 };
 
 }
+
+
+std::ostream &operator<<(std::ostream &os, const Expr::Type &type);
