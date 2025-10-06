@@ -14,7 +14,7 @@ if(MSVC)
 endif()
 
 
-file(GLOB DB_SOURCES "src/*.cpp")
+file(GLOB DB_SOURCES "src/*.cpp" "src/database/*.cpp")
 list(REMOVE_ITEM DB_SOURCES "src/main.cpp")
 
 add_executable(${PROJECT_NAME} ${DB_SOURCES} "src/repl/main.cpp")
