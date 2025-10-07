@@ -22,8 +22,7 @@ struct DatabaseHeader
 // this is used in indexes to then find the row data
 struct Slot
 {
-  // for the cell we are pointing to
-  u16 cellOffset;
+  u16 cellOffset; // from the end of the header
   u16 cellSize; // mark as 0 for free
 };
 
@@ -33,20 +32,60 @@ struct Slot
 // as the slots are expected to be stored immediately after the header
 struct SlotHeader
 {
-  u16 freeStart;
-  u16 freeLength;
+  u16 freeStart = 0; // starting from end of header
+  u16 freeLength; // marked as free if 0
 
   Slot *getSlot(u16 slotNumber)
   {
+    // go to the end of this header struct, then to the specified slot
     return reinterpret_cast<Slot *>(this + 1) + slotNumber;
+  }
+
+  void* getCell(u16 offset)
+  {
+    char* headerEnd = reinterpret_cast<char*>(this+1);
+    return headerEnd + offset;
+  }
+
+  void* getSlotCell(u16 slotNumber, Slot *retSlot)
+  {
+    Slot *s = getSlot(slotNumber);
+    if (retSlot != nullptr)
+    {
+      *retSlot = *s;
+    }
+    return getCell(s->cellOffset);
+  }
+
+  void* newCell(u16 cellSize, u16 *retSlotNumber)
+  {
+    char* headerEnd = reinterpret_cast<char*>(this+1);
+    Slot *slot = reinterpret_cast<Slot*>(headerEnd + freeStart);
+    slot->cellSize = cellSize;
+
+    freeStart += sizeof(Slot);
+    slot->cellOffset = freeStart + freeLength - cellSize;
+
+    freeLength -= slot->cellSize + sizeof(Slot); // shrinks from both sides
+
+
+    if (retSlotNumber != nullptr)
+    {
+      *retSlotNumber = (reinterpret_cast<intptr_t>(slot) - reinterpret_cast<intptr_t>(headerEnd)) / sizeof(Slot);
+    }
+
+    return headerEnd + slot->cellOffset;
   }
 };
 
 struct LeafCell
 {
-  u32 totalSize;
-  u32 key;
-  std::unique_ptr<std::byte> data;
+  struct Cell
+  {
+    u32 payloadSize;
+    u32 key;
+  } cell;
+  std::unique_ptr<char[]> data;
 };
 
 struct InteriorCell
@@ -133,7 +172,7 @@ struct LeafNode
       : page(PageType::Leaf)
   {
     BTreeHeader *header = page.header();
-    header->slots.freeStart = sizeof(*header); // start the slots after the header
+    header->slots.freeStart = 0;
     header->slots.freeLength = PAGE_SIZE - header->slots.freeStart - sizeof(Reserved);
 
     setSibling(0);
@@ -254,12 +293,12 @@ public:
   template<typename H = CommonHeader>
   void flushPage(u32 pageNum, const Page<H> &page)
   {
-    if (!m_fstream.seekp(pageNum * PAGE_SIZE))
+    if (!m_stream.seekp(pageNum * PAGE_SIZE))
     {
       throw PageError(pageNum, "Failed in seeking to flush");
       return;
     }
-    if (!m_fstream.write(reinterpret_cast<const char*>(page.buf.data()), page.buf.size()))
+    if (!m_stream.write(reinterpret_cast<const char*>(page.buf.data()), page.buf.size()))
     {
       throw PageError(pageNum, "Failed to flush");
       return;
@@ -269,10 +308,10 @@ public:
   [[nodiscard]] PageId nextFree();
   void freePage(PageId pageNum);
 
-  explicit Pager(const char *filename);
+  explicit Pager(std::iostream &stream);
 
 private:
-  std::fstream m_fstream;
+  std::iostream &m_stream;
   // our cache for the pages
   std::unordered_map<PageId, Page<>> m_pages;
   u32 m_fSize;

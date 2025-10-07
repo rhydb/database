@@ -47,13 +47,24 @@ private:
 };
 
 TEST_F(TempFileFixture, CreateDatabase) {
-  Database db = Database(path.c_str());
+  std::fstream f;
+  f.open(path, std::ios::in | std::ios::out | std::ios::binary | std::ios::app);
+  Database db = Database(f);
+  Page<> &p = db.pager.getPage(0);
+  EXPECT_EQ(PageType::First, p.header()->type);
+}
+
+TEST(Database, InMemory) {
+  std::stringstream ss;
+  Database db = Database(ss);
   Page<> &p = db.pager.getPage(0);
   EXPECT_EQ(PageType::First, p.header()->type);
 }
 
 TEST_F(TempFileFixture, Freelist) {
-  Database db = Database(path.c_str());
+  std::fstream f;
+  f.open(path, std::ios::in | std::ios::out | std::ios::binary | std::ios::app);
+  Database db = Database(f);
   Page<FirstPage::Header> &firstPage = db.pager.getPage(0).as<FirstPage::Header>();
 
   EXPECT_EQ(0, firstPage.header()->db.freelist);
@@ -89,6 +100,64 @@ TEST_F(TempFileFixture, Freelist) {
   a = db.pager.nextFree();
   EXPECT_EQ(1, a);
   EXPECT_EQ(0, firstPage.header()->db.freelist);
+}
+
+TEST(Slots, AddCells)
+{
+  // test cells in the slots
+  std::array<char, 128> buf;
+  SlotHeader *sh = reinterpret_cast<SlotHeader*>(buf.data());
+  sh->freeLength = buf.size() - sizeof(SlotHeader);
+  sh->freeStart = 0;
+
+  LeafCell cell;
+  cell.cell.key = 123;
+  cell.cell.payloadSize = 20;
+  cell.data = std::make_unique<char[]>(cell.cell.payloadSize);
+  const int totalCellSize = sizeof(cell.cell) + cell.cell.payloadSize;
+  u16 slotNumber;
+  sh->newCell(totalCellSize, &slotNumber); 
+
+  Slot slot = *sh->getSlot(slotNumber);
+
+  EXPECT_EQ(totalCellSize, slot.cellSize);
+  EXPECT_EQ(0, slotNumber);
+  EXPECT_EQ(buf.size() - totalCellSize, slot.cellOffset);
+  EXPECT_EQ(buf.size() - sizeof(SlotHeader) - sizeof(Slot) - totalCellSize, sh->freeLength);
+  EXPECT_EQ(sizeof(Slot), sh->freeStart);
+
+  sh->newCell(totalCellSize, &slotNumber);
+  slot = *sh->getSlot(slotNumber);
+  EXPECT_EQ(1, slotNumber);
+  EXPECT_EQ(buf.size() - 2*totalCellSize, slot.cellOffset);
+  EXPECT_EQ(buf.size() - sizeof(SlotHeader) - 2*sizeof(Slot) - 2*totalCellSize, sh->freeLength);
+  EXPECT_EQ(2*sizeof(Slot), sh->freeStart);
+}
+
+TEST(Slots, AddThenRead)
+{
+  // test cells in the slots
+  std::array<char, 128> buf;
+  SlotHeader *sh = reinterpret_cast<SlotHeader*>(buf.data());
+  sh->freeLength = buf.size() - sizeof(SlotHeader);
+  sh->freeStart = 0;
+
+  LeafCell cell;
+  cell.cell.key = 123;
+  cell.cell.payloadSize = 20;
+  cell.data = std::make_unique<char[]>(cell.cell.payloadSize);
+  const int totalCellSize = sizeof(cell.cell) + cell.cell.payloadSize;
+
+  Slot slot;
+  u16 slotNumber;
+  LeafCell::Cell *pCell = reinterpret_cast<LeafCell::Cell*>(sh->newCell(totalCellSize, &slotNumber)); 
+  *pCell = cell.cell;
+
+  LeafCell::Cell readCell = *reinterpret_cast<LeafCell::Cell*>(sh->getSlotCell(slotNumber, &slot));
+
+  EXPECT_EQ(reinterpret_cast<intptr_t>(pCell), reinterpret_cast<intptr_t>(sh + 1) + slot.cellOffset);
+  EXPECT_EQ(cell.cell.key, readCell.key);
+  EXPECT_EQ(cell.cell.payloadSize, readCell.payloadSize);
 }
 
 // TEST(Database, InsertSelect) {

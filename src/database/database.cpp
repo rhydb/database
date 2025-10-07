@@ -1,9 +1,11 @@
 #include "database/database.hpp"
 #include "machine.hpp"
 
-Database::Database(const char *filename)
-: pager(filename)
-{
+#include <sstream>
+
+Database::Database(std::iostream &stream)
+: pager(stream) {
+  // m_stream.open(file, std::ios::in | std::ios::out | std::ios::binary | std::ios::app);
 }
 
 //

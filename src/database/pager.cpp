@@ -1,16 +1,16 @@
 #include "database/pager.hpp"
 
-Pager::Pager(const char* file)
-{
-  m_fstream.open(file, std::ios::in | std::ios::out | std::ios::binary | std::ios::app);
-  if (!m_fstream)
+Pager::Pager(std::iostream &stream)
+: m_stream(stream) {
+  // m_stream.open(file, std::ios::in | std::ios::out | std::ios::binary | std::ios::app);
+  if (!m_stream)
   {
     throw std::runtime_error("Failed to open database file.");
   }
  
-  m_fstream.seekg(0, std::ios::end);
-  m_fSize =  m_fstream.tellg();
-  if (!m_fstream)
+  m_stream.seekg(0, std::ios::end);
+  m_fSize =  m_stream.tellg();
+  if (!m_stream)
   {
     throw std::runtime_error("Failed to get size of database file.");
   }
@@ -40,11 +40,11 @@ Page<>& Pager::getPage(PageId pageNum)
   // read the page and create it in cache
   // TODO: convert the endianness using page type to know the data inside
   // TODO: read the type bytes manually then call the appropiate deserialise on that type
-  if (!m_fstream.seekg(pageNum * PAGE_SIZE))
+  if (!m_stream.seekg(pageNum * PAGE_SIZE))
   {
     throw PageError(pageNum, "Failed in seeking to read");
   }
-  if (!m_fstream.read(reinterpret_cast<char*>(m_pages[pageNum].buf.data()), m_pages[pageNum].buf.size()))
+  if (!m_stream.read(reinterpret_cast<char*>(m_pages[pageNum].buf.data()), m_pages[pageNum].buf.size()))
   {
     throw PageError(pageNum, "Failed to read");
   }
@@ -80,12 +80,12 @@ PageId Pager::nextFree()
   }
 
   // append to file instead
-  m_fstream.seekg(0, std::ios::end);
-  m_fSize = m_fstream.tellg();
+  m_stream.seekg(0, std::ios::end);
+  m_fSize = m_stream.tellg();
   PageId nextId = m_fSize / PAGE_SIZE;
   Page<CommonHeader> newPage;
   setPage(nextId, newPage);
-  flushPage(nextId, newPage);
+  flushPage(nextId, newPage); // write it to disk now
   m_fSize += PAGE_SIZE; // the file size has increased
   return nextId;
 }
@@ -98,6 +98,7 @@ void Pager::freePage(PageId pageNum)
   // update the linked list
   page.header()->next = firstPage.header()->db.freelist;;
   firstPage.header()->db.freelist = pageNum;
-  flushPage(pageNum, page);
-  flushPage(0, firstPage);
+  // TODO do we need to flush these now?
+  // flushPage(pageNum, page);
+  // flushPage(0, firstPage);
 }

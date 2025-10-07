@@ -8,7 +8,7 @@
 class Database
 {
 public:
-  explicit Database(const char *filename);
+  explicit Database(std::iostream &stream);
   Pager pager;
 };
 
