@@ -160,6 +160,22 @@ TEST(Slots, AddThenRead)
   EXPECT_EQ(cell.cell.payloadSize, readCell.payloadSize);
 }
 
+TEST(Slots, OutOfBounds)
+{
+  std::array<char, 128> buf;
+  SlotHeader *sh = reinterpret_cast<SlotHeader*>(buf.data());
+  sh->freeLength = buf.size() - sizeof(SlotHeader);
+  sh->freeStart = 0;
+
+  ASSERT_THROW({
+      sh->getSlot(0);
+  }, std::out_of_range);
+
+  ASSERT_THROW({
+      sh->getSlot(1);
+  }, std::out_of_range);
+}
+
 // TEST(Database, InsertSelect) {
 //   Table t = Table("test.db");
 //   Row r = {1, {"username"}, {"email"}};

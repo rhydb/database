@@ -23,8 +23,10 @@ struct DatabaseHeader
 struct Slot
 {
   u16 cellOffset; // from the end of the header
-  u16 cellSize; // mark as 0 for free
+  u16 cellSize;   // mark as 0 for free
 };
+
+using SlotNum = u16;
 
 // not to be used independently
 // used for page types to support slots
@@ -33,21 +35,25 @@ struct Slot
 struct SlotHeader
 {
   u16 freeStart = 0; // starting from end of header
-  u16 freeLength; // marked as free if 0
+  u16 freeLength;    // marked as free if 0
 
-  Slot *getSlot(u16 slotNumber)
+  Slot *getSlot(SlotNum slotNumber)
   {
     // go to the end of this header struct, then to the specified slot
+    if (slotNumber * sizeof(Slot) >= freeStart)
+    {
+      throw std::out_of_range("Slot number out of bounds");
+    }
     return reinterpret_cast<Slot *>(this + 1) + slotNumber;
   }
 
-  void* getCell(u16 offset)
+  void *getCell(u16 offset)
   {
-    char* headerEnd = reinterpret_cast<char*>(this+1);
+    char *headerEnd = reinterpret_cast<char *>(this + 1);
     return headerEnd + offset;
   }
 
-  void* getSlotCell(u16 slotNumber, Slot *retSlot)
+  void *getSlotCell(SlotNum slotNumber, Slot *retSlot)
   {
     Slot *s = getSlot(slotNumber);
     if (retSlot != nullptr)
@@ -57,17 +63,23 @@ struct SlotHeader
     return getCell(s->cellOffset);
   }
 
-  void* newCell(u16 cellSize, u16 *retSlotNumber)
+  void freeSlot(SlotNum slotNum)
   {
-    char* headerEnd = reinterpret_cast<char*>(this+1);
-    Slot *slot = reinterpret_cast<Slot*>(headerEnd + freeStart);
+    Slot *s = getSlot(slotNum);
+    s->cellSize = 0;
+  }
+
+  // TODO: pass a comparison callback
+  void *newCell(u16 cellSize, SlotNum *retSlotNumber)
+  {
+    char *headerEnd = reinterpret_cast<char *>(this + 1);
+    Slot *slot = reinterpret_cast<Slot *>(headerEnd + freeStart);
     slot->cellSize = cellSize;
 
     freeStart += sizeof(Slot);
     slot->cellOffset = freeStart + freeLength - cellSize;
 
     freeLength -= slot->cellSize + sizeof(Slot); // shrinks from both sides
-
 
     if (retSlotNumber != nullptr)
     {
@@ -123,13 +135,13 @@ struct Page
     std::memset(buf.data(), 0, buf.size());
 
     // TODO: endianness
-    
+
     // setup the custom header
     Header *h = header();
     *h = Header();
 
     // setup the common header
-    CommonHeader *ch = reinterpret_cast<CommonHeader*>(h);
+    CommonHeader *ch = reinterpret_cast<CommonHeader *>(h);
     ch->type = type;
   }
 
@@ -250,7 +262,7 @@ struct OverflowPage
 
   Page<Header> page;
   OverflowPage()
-    : page(PageType::Overflow)
+      : page(PageType::Overflow)
   {
   }
 };
@@ -290,7 +302,7 @@ public:
   Page<> &getPage(PageId pageNum);
   void setPage(PageId pageNum, const Page<> &page) noexcept;
 
-  template<typename H = CommonHeader>
+  template <typename H = CommonHeader>
   void flushPage(u32 pageNum, const Page<H> &page)
   {
     if (!m_stream.seekp(pageNum * PAGE_SIZE))
@@ -298,7 +310,7 @@ public:
       throw PageError(pageNum, "Failed in seeking to flush");
       return;
     }
-    if (!m_stream.write(reinterpret_cast<const char*>(page.buf.data()), page.buf.size()))
+    if (!m_stream.write(reinterpret_cast<const char *>(page.buf.data()), page.buf.size()))
     {
       throw PageError(pageNum, "Failed to flush");
       return;
