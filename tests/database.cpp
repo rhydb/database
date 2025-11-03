@@ -1,6 +1,7 @@
 
 #include <gtest/gtest.h>
 #include <filesystem>
+#include <fstream>
 
 #include "database/database.hpp"
 
@@ -102,7 +103,7 @@ TEST_F(TempFileFixture, Freelist) {
   EXPECT_EQ(0, firstPage.header()->db.freelist);
 }
 
-TEST(Slots, AddCells)
+TEST(Slots, AddSlotsAndCells)
 {
   // test cells in the slots
   std::array<char, 128> buf;
@@ -115,23 +116,28 @@ TEST(Slots, AddCells)
   cell.cell.payloadSize = 20;
   cell.data = std::make_unique<char[]>(cell.cell.payloadSize);
   const int totalCellSize = sizeof(cell.cell) + cell.cell.payloadSize;
-  u16 slotNumber;
-  sh->newCell(totalCellSize, &slotNumber); 
+  
+  {
+    Slot *slot = sh->nextSlot(totalCellSize);
+    slot->cellOffset = sh->nextCell(totalCellSize);
+    u16 slotNumber = sh->slotNumber(slot);
 
-  Slot slot = *sh->getSlot(slotNumber);
+    EXPECT_EQ(totalCellSize, slot->cellSize);
+    EXPECT_EQ(0, slotNumber);
+    EXPECT_EQ(buf.size() - sizeof(SlotHeader) - totalCellSize, slot->cellOffset);
+    EXPECT_EQ(buf.size() - sizeof(SlotHeader) - sizeof(Slot) - totalCellSize, sh->freeLength);
+    EXPECT_EQ(sizeof(Slot), sh->freeStart);
+  }
 
-  EXPECT_EQ(totalCellSize, slot.cellSize);
-  EXPECT_EQ(0, slotNumber);
-  EXPECT_EQ(buf.size() - totalCellSize, slot.cellOffset);
-  EXPECT_EQ(buf.size() - sizeof(SlotHeader) - sizeof(Slot) - totalCellSize, sh->freeLength);
-  EXPECT_EQ(sizeof(Slot), sh->freeStart);
-
-  sh->newCell(totalCellSize, &slotNumber);
-  slot = *sh->getSlot(slotNumber);
-  EXPECT_EQ(1, slotNumber);
-  EXPECT_EQ(buf.size() - 2*totalCellSize, slot.cellOffset);
-  EXPECT_EQ(buf.size() - sizeof(SlotHeader) - 2*sizeof(Slot) - 2*totalCellSize, sh->freeLength);
-  EXPECT_EQ(2*sizeof(Slot), sh->freeStart);
+  {
+    Slot *slot2 = sh->nextSlot(totalCellSize);
+    slot2->cellOffset = sh->nextCell(totalCellSize);
+    u16 slotNumber2 = sh->slotNumber(slot2);
+    EXPECT_EQ(1, slotNumber2);
+    EXPECT_EQ(buf.size() - sizeof(SlotHeader) - 2*totalCellSize, slot2->cellOffset);
+    EXPECT_EQ(buf.size() - sizeof(SlotHeader) - 2*sizeof(Slot) - 2*totalCellSize, sh->freeLength);
+    EXPECT_EQ(2*sizeof(Slot), sh->freeStart);
+  }
 }
 
 TEST(Slots, AddThenRead)
@@ -148,14 +154,19 @@ TEST(Slots, AddThenRead)
   cell.data = std::make_unique<char[]>(cell.cell.payloadSize);
   const int totalCellSize = sizeof(cell.cell) + cell.cell.payloadSize;
 
-  Slot slot;
-  u16 slotNumber;
-  LeafCell::Cell *pCell = reinterpret_cast<LeafCell::Cell*>(sh->newCell(totalCellSize, &slotNumber)); 
+  // create the slot and its cell
+  Slot *slot = sh->nextSlot(totalCellSize);
+  slot->cellOffset = sh->nextCell(totalCellSize);
+  u16 slotNumber = sh->slotNumber(slot);
+  // set the contents of the cell
+  LeafCell::Cell *pCell = reinterpret_cast<LeafCell::Cell*>(sh->getCell(slot->cellOffset)); 
   *pCell = cell.cell;
 
-  LeafCell::Cell readCell = *reinterpret_cast<LeafCell::Cell*>(sh->getSlotCell(slotNumber, &slot));
+  // read the slot and cell back using the slot number
+  Slot readSlot;
+  LeafCell::Cell readCell = *reinterpret_cast<LeafCell::Cell*>(sh->getSlotCell(slotNumber, &readSlot));
 
-  EXPECT_EQ(reinterpret_cast<intptr_t>(pCell), reinterpret_cast<intptr_t>(sh + 1) + slot.cellOffset);
+  EXPECT_EQ(reinterpret_cast<intptr_t>(pCell), reinterpret_cast<intptr_t>(sh + 1) + slot->cellOffset);
   EXPECT_EQ(cell.cell.key, readCell.key);
   EXPECT_EQ(cell.cell.payloadSize, readCell.payloadSize);
 }
@@ -167,13 +178,42 @@ TEST(Slots, OutOfBounds)
   sh->freeLength = buf.size() - sizeof(SlotHeader);
   sh->freeStart = 0;
 
-  ASSERT_THROW({
+  // allow getting the slot on the boundary of freeStart as that's how we get new cells
+  ASSERT_NO_THROW({
       sh->getSlot(0);
-  }, std::out_of_range);
+  });
 
   ASSERT_THROW({
       sh->getSlot(1);
   }, std::out_of_range);
+}
+
+TEST(Slots, Insertion)
+{
+  std::array<char, 128> buf;
+  SlotHeader *sh = reinterpret_cast<SlotHeader*>(buf.data());
+  sh->freeLength = buf.size() - sizeof(SlotHeader);
+  sh->freeStart = 0;
+
+  LeafCell cell;
+  cell.cell.key = 123;
+
+  struct Cell {
+    u16 totalSize;
+    std::array<char, 10> data;
+  };
+  Cell c;
+  std::strcpy(c.data.data(), "key1");
+  c.totalSize = c.data.size();
+  Slot *s = sh->insertCell(c, std::function([](const Cell &a, const Cell &b){ return true; }));
+  ASSERT_TRUE(s != nullptr);
+
+  EXPECT_EQ(sh->freeStart + sh->freeLength, s->cellOffset);
+  EXPECT_EQ(sizeof(c), s->cellSize);
+  Cell *pc = reinterpret_cast<Cell *>(sh->getCell(s->cellOffset));
+
+  EXPECT_EQ(c.totalSize, pc->totalSize);
+  EXPECT_EQ(c.data, pc->data);
 }
 
 // TEST(Database, InsertSelect) {

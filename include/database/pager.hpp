@@ -1,6 +1,6 @@
 #pragma once
 
-#include <fstream>
+#include <functional>
 #include <memory>
 #include <cstring>
 #include <unordered_map>
@@ -34,13 +34,14 @@ using SlotNum = u16;
 // as the slots are expected to be stored immediately after the header
 struct SlotHeader
 {
-  u16 freeStart = 0; // starting from end of header
-  u16 freeLength;    // marked as free if 0
+  u16 freeStart = 0; // offset from end of header
+  u16 freeLength;    // marked as free if both 0
 
   Slot *getSlot(SlotNum slotNumber)
   {
     // go to the end of this header struct, then to the specified slot
-    if (slotNumber * sizeof(Slot) >= freeStart)
+    // allow getting the slot on the boundary of freeStart as that's how we get new cells
+    if (slotNumber * sizeof(Slot) > freeStart)
     {
       throw std::out_of_range("Slot number out of bounds");
     }
@@ -70,8 +71,79 @@ struct SlotHeader
   }
 
   // TODO: pass a comparison callback
-  void *newCell(u16 cellSize, SlotNum *retSlotNumber)
+  // add a cell with its slot in the sorted position
+  template <typename Cell>
+  Slot *insertCell(const Cell &cell, std::function<bool(const Cell &a, const Cell &b)> comparator)
   {
+    SlotNum l = 0;
+    SlotNum r = freeStart / sizeof(Slot);
+
+    while (l < r)
+    {
+      SlotNum mid = l + (r - l) / 2;
+      const Cell *midCell = reinterpret_cast<Cell *>(getSlotCell(mid, nullptr));
+
+      if (comparator(cell, *midCell))
+      {
+        // cell < midCell
+        r = mid - 1;
+      }
+      else
+      {
+        l = mid + 1;
+      }
+    }
+
+    assert(l == r && "l and r should be equal");
+
+    Slot *s = insertSlot(l);
+    s->cellSize = sizeof(Cell);
+    s->cellOffset = nextCell(sizeof(Cell));
+
+    char *headerEnd = reinterpret_cast<char *>(this + 1);
+    void *cellDst = headerEnd + s->cellOffset;
+
+    std::memcpy(cellDst, &cell, sizeof(Cell));
+    
+    return s;
+  }
+
+  u16 nextCell(u16 cellSize)
+  {
+    assert(freeLength >= cellSize && "Not enough room in page for new cell");
+
+    const u16 cellOffset = freeStart + freeLength - cellSize;
+    freeLength -= cellSize;
+
+    return cellOffset;
+  }
+
+  SlotNum slotNumber(const Slot *s)
+  {
+    // how many slots between the header end and s
+    const char *headerEnd = reinterpret_cast<char *>(this + 1);
+    return (reinterpret_cast<intptr_t>(s) - reinterpret_cast<intptr_t>(headerEnd)) / sizeof(Slot);
+  }
+
+  Slot *nextSlot(u16 cellSize)
+  {
+    assert(freeLength >= cellSize + sizeof(Slot) && "Not enough room in page for new cell&slot");
+    char *headerEnd = reinterpret_cast<char *>(this + 1);
+    Slot *slot = reinterpret_cast<Slot *>(headerEnd + freeStart);
+
+    assert(cellSize > 0 && "New slot cannot have cellSize of 0 to not be marked free");
+    slot->cellSize = cellSize;
+
+    // shrinks from both sides
+    freeStart += sizeof(Slot);
+    freeLength -= sizeof(Slot);
+
+    return slot;
+  }
+
+  void *nextSlotCell(u16 cellSize, SlotNum *retSlotNumber)
+  {
+    assert(freeLength >= cellSize + sizeof(Slot) && "Not enough room in page for new cell&slot");
     char *headerEnd = reinterpret_cast<char *>(this + 1);
     Slot *slot = reinterpret_cast<Slot *>(headerEnd + freeStart);
     slot->cellSize = cellSize;
@@ -79,7 +151,9 @@ struct SlotHeader
     freeStart += sizeof(Slot);
     slot->cellOffset = freeStart + freeLength - cellSize;
 
-    freeLength -= slot->cellSize + sizeof(Slot); // shrinks from both sides
+    // shrinks from both sides
+    freeLength -= slot->cellSize;
+    freeLength -= sizeof(Slot);
 
     if (retSlotNumber != nullptr)
     {
@@ -88,6 +162,17 @@ struct SlotHeader
 
     return headerEnd + slot->cellOffset;
   }
+
+private:
+  Slot *insertSlot(SlotNum slotNum)
+  {
+    Slot *s = getSlot(slotNum);
+    const size_t bytes = freeStart - (slotNum * sizeof(Slot));
+    std::memmove(s + 1, s, bytes);
+    freeLength -= sizeof(Slot);
+    freeStart += sizeof(Slot);
+    return s;
+  }
 };
 
 struct LeafCell
@@ -95,7 +180,10 @@ struct LeafCell
   struct Cell
   {
     u32 payloadSize;
-    u32 key;
+    union {
+      u32 key;
+      PageId leaf;
+    };
   } cell;
   std::unique_ptr<char[]> data;
 };
