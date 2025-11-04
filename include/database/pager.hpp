@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <cassert>
 #include <sstream>
+#include <span>
 #include "row.hpp"
 
 using PageId = u32;
@@ -30,12 +31,17 @@ using SlotNum = u16;
 
 // not to be used independently
 // used for page types to support slots
-// this header should be placed at the end of any other header
-// as the slots are expected to be stored immediately after the header
 struct SlotHeader
 {
   u16 freeStart = 0; // offset from end of header
   u16 freeLength;    // marked as free if both 0
+
+  // data is the region of the page that is used to store slots and cells
+  // it does not include the slot header itself or any other data, just slots and cells
+  explicit SlotHeader(std::span<std::byte> data)
+      : m_data(data) {
+        freeLength = m_data.size();
+      }
 
   Slot *getSlot(SlotNum slotNumber)
   {
@@ -45,13 +51,12 @@ struct SlotHeader
     {
       throw std::out_of_range("Slot number out of bounds");
     }
-    return reinterpret_cast<Slot *>(this + 1) + slotNumber;
+    return reinterpret_cast<Slot *>(m_data.data() + slotNumber * sizeof(Slot));
   }
 
   void *getCell(u16 offset)
   {
-    char *headerEnd = reinterpret_cast<char *>(this + 1);
-    return headerEnd + offset;
+    return m_data.data() + offset;
   }
 
   void *getSlotCell(SlotNum slotNumber, Slot *retSlot)
@@ -73,7 +78,7 @@ struct SlotHeader
   // TODO: pass a comparison callback
   // add a cell with its slot in the sorted position
   template <typename Cell>
-  Slot *insertCell(const Cell &cell, std::function<bool(const Cell &a, const Cell &b)> comparator)
+  Slot *insertCell(const Cell &cell, std::function<bool(const Cell &a, const Cell &b)> comparator = std::less<Cell>{}, u16 *retSlotNumber = nullptr)
   {
     SlotNum l = 0;
     SlotNum r = freeStart / sizeof(Slot);
@@ -96,15 +101,30 @@ struct SlotHeader
 
     assert(l == r && "l and r should be equal");
 
-    Slot *s = insertSlot(l);
+    // insert slot will move an existing slot if there is one
+    // TODO: do not insert if slot is free. add this to existing test
+
+    Slot *s = getSlot(l);
+    const bool isNewSlot = l == freeStart / sizeof(Slot);
+    const bool isFreeSlot = s->cellSize == 0 && s->cellOffset == 0;
+    if (!isFreeSlot || isNewSlot)
+    {
+      // not a free slot
+      s = insertSlot(l);
+    }
+
+    if (retSlotNumber != nullptr)
+    {
+      *retSlotNumber = l;
+    }
+
     s->cellSize = sizeof(Cell);
     s->cellOffset = nextCell(sizeof(Cell));
 
-    char *headerEnd = reinterpret_cast<char *>(this + 1);
-    void *cellDst = headerEnd + s->cellOffset;
+    void *cellDst = getCell(s->cellOffset);
 
     std::memcpy(cellDst, &cell, sizeof(Cell));
-    
+
     return s;
   }
 
@@ -118,18 +138,10 @@ struct SlotHeader
     return cellOffset;
   }
 
-  SlotNum slotNumber(const Slot *s)
-  {
-    // how many slots between the header end and s
-    const char *headerEnd = reinterpret_cast<char *>(this + 1);
-    return (reinterpret_cast<intptr_t>(s) - reinterpret_cast<intptr_t>(headerEnd)) / sizeof(Slot);
-  }
-
-  Slot *nextSlot(u16 cellSize)
+  Slot *nextSlot(u16 cellSize, u16 *retSlotNum = nullptr)
   {
     assert(freeLength >= cellSize + sizeof(Slot) && "Not enough room in page for new cell&slot");
-    char *headerEnd = reinterpret_cast<char *>(this + 1);
-    Slot *slot = reinterpret_cast<Slot *>(headerEnd + freeStart);
+    Slot *slot = reinterpret_cast<Slot *>(m_data.data() + freeStart);
 
     assert(cellSize > 0 && "New slot cannot have cellSize of 0 to not be marked free");
     slot->cellSize = cellSize;
@@ -137,6 +149,11 @@ struct SlotHeader
     // shrinks from both sides
     freeStart += sizeof(Slot);
     freeLength -= sizeof(Slot);
+
+    if (retSlotNum != nullptr)
+    {
+      *retSlotNum = slotNumber(slot);
+    }
 
     return slot;
   }
@@ -164,6 +181,18 @@ struct SlotHeader
   }
 
 private:
+  std::span<std::byte> m_data;
+
+  SlotNum slotNumber(const Slot *s)
+  {
+    // how many slots between the header end and s
+    assert(
+        reinterpret_cast<intptr_t>(s) >= reinterpret_cast<intptr_t>(m_data.data())
+        && reinterpret_cast<intptr_t>(s) <= reinterpret_cast<intptr_t>(m_data.data() + m_data.size())
+        && "Slot number out of bounds");
+    return (reinterpret_cast<intptr_t>(s) - reinterpret_cast<intptr_t>(m_data.data())) / sizeof(Slot);
+  }
+
   Slot *insertSlot(SlotNum slotNum)
   {
     Slot *s = getSlot(slotNum);
@@ -180,7 +209,8 @@ struct LeafCell
   struct Cell
   {
     u32 payloadSize;
-    union {
+    union
+    {
       u32 key;
       PageId leaf;
     };
@@ -211,6 +241,8 @@ struct CommonHeader
 };
 
 // template the header so that we can retrieve it easily
+struct BTreeHeader;
+
 template <typename Header = CommonHeader>
 struct Page
 {
@@ -225,8 +257,15 @@ struct Page
     // TODO: endianness
 
     // setup the custom header
+
     Header *h = header();
-    *h = Header();
+    if constexpr (std::is_same_v<Header, BTreeHeader>) {
+      *h = Header(buf);
+    } else {
+      *h = Header();
+
+    }
+
 
     // setup the common header
     CommonHeader *ch = reinterpret_cast<CommonHeader *>(h);
@@ -252,6 +291,8 @@ struct BTreeHeader
   CommonHeader common;
   PageId parent = 0;
   SlotHeader slots;
+
+  BTreeHeader(std::array<std::byte, PAGE_SIZE> array) : slots(std::span<std::byte>(array.data(), array.size())) {}
 };
 static_assert(offsetof(BTreeHeader, common) == 0, "Common header must be at offset 0");
 
