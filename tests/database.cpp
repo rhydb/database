@@ -63,6 +63,8 @@ TEST(Database, InMemory) {
   EXPECT_EQ(PageType::First, p.header()->type);
 }
 
+/* the database free list is a linked list of the entirely free pages on disk.
+ * marking a page as free sets it as the head of the linked list and sets its pointer to the previous head */
 TEST_F(TempFileFixture, Freelist) {
   std::fstream f;
   f.open(path, std::ios::in | std::ios::out | std::ios::binary | std::ios::app);
@@ -104,7 +106,8 @@ TEST_F(TempFileFixture, Freelist) {
   EXPECT_EQ(0, firstPage.header()->db.freelist);
 }
 
-TEST(Slots, AddSlotsAndCells)
+/* add slots with cell data and make sure the free start and length pointers are updated */
+TEST(Slots, AddSlotsAndCellsUpdatesFreePointers)
 {
   // test cells in the slots
   std::array<std::byte, 128> buf;
@@ -139,6 +142,7 @@ TEST(Slots, AddSlotsAndCells)
   }
 }
 
+/* add a slot and cell with some data, then read the cell data back using just the slot */
 TEST(Slots, AddThenRead)
 {
   // test cells in the slots
@@ -183,10 +187,10 @@ TEST(Slots, OutOfBounds)
   }, std::out_of_range);
 }
 
+/* test that cells and slots are inserted correctly into the slotted page and that the data is read back correctly.
+ * we also test that the sorting places the slots into the correct place */
 TEST(Slots, Insertion)
 {
-  /* test that cells and slots are inserted correctly into the slotted page and that the data is read back correctly.
-   * we also test that the sorting places the slots into the correct place */
   std::array<std::byte, 128> buf;
   SlotHeader sh = SlotHeader(std::span(buf.data(), buf.size()));
 
@@ -229,6 +233,8 @@ TEST(Slots, Insertion)
   EXPECT_EQ(0, slotNumber);
 }
 
+/* test that data can be inserted, deleted, and reinserted into the same slot
+ * this checks that the sorted order is maintained when reinserting into a previous position */
 TEST(Slots, InsertAfterDelete)
 {
   std::array<std::byte, 128> buf;
