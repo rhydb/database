@@ -4,6 +4,7 @@
 #include <fstream>
 
 #include "database/database.hpp"
+#include "database/pages/btree.hpp"
 
 class TempFileFixture : public ::testing::Test
 {
@@ -117,8 +118,8 @@ TEST(Slots, AddSlotsAndCells)
   
   {
     u16 slotNumber;
-    Slot *slot = sh.nextSlot(totalCellSize, &slotNumber);
-    slot->cellOffset = sh.nextCell(totalCellSize);
+    Slot *slot = sh.createNextSlot(totalCellSize, &slotNumber);
+    slot->cellOffset = sh.createNextCell(totalCellSize);
 
     EXPECT_EQ(totalCellSize, slot->cellSize);
     EXPECT_EQ(0, slotNumber);
@@ -129,8 +130,8 @@ TEST(Slots, AddSlotsAndCells)
 
   {
     u16 slotNumber2;
-    Slot *slot2 = sh.nextSlot(totalCellSize, &slotNumber2);
-    slot2->cellOffset = sh.nextCell(totalCellSize);
+    Slot *slot2 = sh.createNextSlot(totalCellSize, &slotNumber2);
+    slot2->cellOffset = sh.createNextCell(totalCellSize);
     EXPECT_EQ(1, slotNumber2);
     EXPECT_EQ(buf.size() - 2*totalCellSize, slot2->cellOffset);
     EXPECT_EQ(buf.size() - 2*sizeof(Slot) - 2*totalCellSize, sh.freeLength);
@@ -152,15 +153,15 @@ TEST(Slots, AddThenRead)
 
   // create the slot and its cell
   u16 slotNumber;
-  Slot *slot = sh.nextSlot(totalCellSize, &slotNumber);
-  slot->cellOffset = sh.nextCell(totalCellSize);
+  Slot *slot = sh.createNextSlot(totalCellSize, &slotNumber);
+  slot->cellOffset = sh.createNextCell(totalCellSize);
   // set the contents of the cell
   LeafCell::Cell *pCell = reinterpret_cast<LeafCell::Cell*>(sh.getCell(slot->cellOffset)); 
   *pCell = cell.cell;
 
   // read the slot and cell back using the slot number
   Slot readSlot;
-  LeafCell::Cell readCell = *reinterpret_cast<LeafCell::Cell*>(sh.getSlotCell(slotNumber, &readSlot));
+  LeafCell::Cell readCell = *reinterpret_cast<LeafCell::Cell*>(sh.getSlotAndCell(slotNumber, &readSlot));
 
   EXPECT_EQ(reinterpret_cast<intptr_t>(pCell), reinterpret_cast<intptr_t>(buf.data() + slot->cellOffset));
   EXPECT_EQ(cell.cell.key, readCell.key);
@@ -184,6 +185,8 @@ TEST(Slots, OutOfBounds)
 
 TEST(Slots, Insertion)
 {
+  /* test that cells and slots are inserted correctly into the slotted page and that the data is read back correctly.
+   * we also test that the sorting places the slots into the correct place */
   std::array<std::byte, 128> buf;
   SlotHeader sh = SlotHeader(std::span(buf.data(), buf.size()));
 
@@ -194,6 +197,7 @@ TEST(Slots, Insertion)
     u16 totalSize;
     std::array<char, 10> data;
   };
+  // sort the slots keys lexicographically
   auto comparitor = std::function([](const Cell &a, const Cell &b){
         return std::strncmp(a.data.data(), b.data.data(), a.data.size()) < 0;
   });
@@ -223,6 +227,57 @@ TEST(Slots, Insertion)
   Cell *pc3 = reinterpret_cast<Cell *>(sh.getCell(s3->cellOffset));
   EXPECT_EQ(c.data, pc3->data);
   EXPECT_EQ(0, slotNumber);
+}
+
+TEST(Slots, InsertAfterDelete)
+{
+  std::array<std::byte, 128> buf;
+  SlotHeader sh = SlotHeader(std::span(buf.data(), buf.size()));
+  
+  LeafCell cell;
+  cell.cell.key = 123;
+
+  struct Cell {
+    u16 totalSize;
+    std::array<char, 10> data;
+  };
+  // sort the keys lexicographically
+  auto comparitor = std::function([](const Cell &a, const Cell &b){
+        return std::strncmp(a.data.data(), b.data.data(), a.data.size()) < 0;
+  });
+
+
+  Cell c;
+  std::strcpy(c.data.data(), "key1");
+  c.totalSize = c.data.size();
+  sh.insertCell(c, comparitor);
+  // skip key2 so that we can insert it later
+  // we need a different value that is also larger than key1
+  SlotNum slotNumToDelete;
+  std::strcpy(c.data.data(), "key3");
+  sh.insertCell(c, comparitor, &slotNumToDelete);
+  std::strcpy(c.data.data(), "key4");
+  Slot key4 = *sh.insertCell(c, comparitor);
+
+  const u16 freeStart = sh.freeStart;
+  const u16 freeLength = sh.freeLength;
+  sh.deleteSlot(slotNumToDelete);
+  // the old cell data is still there
+  EXPECT_EQ(freeStart - sizeof(Slot), sh.freeStart);
+  EXPECT_EQ(freeLength + sizeof(Slot), sh.freeLength);
+
+  // the slot should have moved down
+  Slot *s = sh.getSlot(slotNumToDelete);
+  EXPECT_EQ(key4.cellOffset, s->cellOffset);
+  EXPECT_EQ(key4.cellSize, s->cellSize);
+
+  SlotNum slotNumUsed;
+  std::strcpy(c.data.data(), "key2");
+  sh.insertCell(c, comparitor, &slotNumUsed);
+  EXPECT_EQ(slotNumToDelete, slotNumUsed);
+  EXPECT_EQ(freeStart, sh.freeStart);
+  // the free length has not increased again because the old cell data is still there
+  EXPECT_EQ(freeLength - sizeof(Cell), sh.freeLength);
 }
 
 // TEST(Database, InsertSelect) {

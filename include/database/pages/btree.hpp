@@ -41,21 +41,23 @@ struct SlotHeader
     return m_data.data() + offset;
   }
 
-  void freeSlot(SlotNum slotNum)
+  // delete the slot from the slot array.
+  void deleteSlot(SlotNum slotNum)
   {
     Slot *s = getSlot(slotNum);
-    s->cellSize = 0;
+    deleteSlot(&s);
   }
 
-  // TODO: pass a comparison callback
-  // add a cell with its slot in the sorted position
+  // add data to a new cel and create its slot in the sorted position
+  // this creates a new cell in the page and assigns a slot to it.
+  // the slot will be in its sorted position and may reuse a free slot if one is present
   template <typename Cell>
   Slot *insertCell(const Cell &cell, std::function<bool(const Cell &a, const Cell &b)> comparator = std::less<Cell>{}, u16 *retSlotNumber = nullptr)
   {
-    SlotNum l = 0;
-    SlotNum r = freeStart / sizeof(Slot);
+    int l = 0;
+    int r = freeStart / sizeof(Slot) - 1;
 
-    while (l < r)
+    while (l <= r)
     {
       SlotNum mid = l + (r - l) / 2;
       const Cell *midCell = reinterpret_cast<Cell *>(getSlotAndCell(mid, nullptr));
@@ -71,19 +73,7 @@ struct SlotHeader
       }
     }
 
-    assert(l == r && "l and r should be equal");
-
-    // insert slot will move an existing slot if there is one
-    // TODO: do not insert if slot is free. add this to existing test
-
-    Slot *s = getSlot(l);
-    const bool isNewSlot = l == freeStart / sizeof(Slot);
-    const bool isFreeSlot = s->cellSize == 0 && s->cellOffset == 0;
-    if (!isFreeSlot || isNewSlot)
-    {
-      // not a free slot
-      s = insertSlot(l);
-    }
+    Slot *s = insertSlot(l);
 
     if (retSlotNumber != nullptr)
     {
@@ -91,7 +81,7 @@ struct SlotHeader
     }
 
     s->cellSize = sizeof(Cell);
-    s->cellOffset = nextCell(sizeof(Cell));
+    s->cellOffset = createNextCell(sizeof(Cell));
 
     void *cellDst = getCell(s->cellOffset);
 
@@ -100,57 +90,13 @@ struct SlotHeader
     return s;
   }
 
-  u16 nextCell(u16 cellSize)
-  {
-    assert(freeLength >= cellSize && "Not enough room in page for new cell");
-
-    const u16 cellOffset = freeStart + freeLength - cellSize;
-    freeLength -= cellSize;
-
-    return cellOffset;
-  }
-
-  Slot *nextSlot(u16 cellSize, u16 *retSlotNum = nullptr)
-  {
-    assert(freeLength >= cellSize + sizeof(Slot) && "Not enough room in page for new cell&slot");
-    Slot *slot = reinterpret_cast<Slot *>(m_data.data() + freeStart);
-
-    assert(cellSize > 0 && "New slot cannot have cellSize of 0 to not be marked free");
-    slot->cellSize = cellSize;
-
-    // shrinks from both sides
-    freeStart += sizeof(Slot);
-    freeLength -= sizeof(Slot);
-
-    if (retSlotNum != nullptr)
-    {
-      *retSlotNum = slotNumber(slot);
-    }
-
-    return slot;
-  }
-
-  void *nextSlotCell(u16 cellSize, SlotNum *retSlotNumber)
-  {
-    assert(freeLength >= cellSize + sizeof(Slot) && "Not enough room in page for new cell&slot");
-    char *headerEnd = reinterpret_cast<char *>(this + 1);
-    Slot *slot = reinterpret_cast<Slot *>(headerEnd + freeStart);
-    slot->cellSize = cellSize;
-
-    freeStart += sizeof(Slot);
-    slot->cellOffset = freeStart + freeLength - cellSize;
-
-    // shrinks from both sides
-    freeLength -= slot->cellSize;
-    freeLength -= sizeof(Slot);
-
-    if (retSlotNumber != nullptr)
-    {
-      *retSlotNumber = (reinterpret_cast<intptr_t>(slot) - reinterpret_cast<intptr_t>(headerEnd)) / sizeof(Slot);
-    }
-
-    return headerEnd + slot->cellOffset;
-  }
+  // create a cell of size cellSize from the free space
+  u16 createNextCell(u16 cellSize);
+  // create a new slot in the free space
+  Slot *createNextSlot(u16 cellSize, u16 *retSlotNum = nullptr);
+  // create a new slot and new cell in the free space
+  // assigns the slot to the newly created cell
+  void *createNextSlotWithCell(u16 cellSize, SlotNum *retSlotNumber);
 
 private:
   std::span<std::byte> m_data;
@@ -161,7 +107,7 @@ private:
     assert(
         reinterpret_cast<intptr_t>(s) >= reinterpret_cast<intptr_t>(m_data.data())
         && reinterpret_cast<intptr_t>(s) <= reinterpret_cast<intptr_t>(m_data.data() + m_data.size())
-        && "Slot number out of bounds");
+        && "Slot pointer out of bounds to retrieve slot number");
     return (reinterpret_cast<intptr_t>(s) - reinterpret_cast<intptr_t>(m_data.data())) / sizeof(Slot);
   }
 
@@ -174,6 +120,23 @@ private:
     freeStart += sizeof(Slot);
     return s;
   }
+
+  // delete the slot from the slot array.
+  // sets s to nullptr.
+  void deleteSlot(Slot **ppSlot)
+  {
+    /*
+     * |0,1,2,3,4|
+     *
+     */
+    const size_t bytes = freeStart - ((slotNumber(*ppSlot) + 1) * sizeof(Slot));
+    std::memmove(*ppSlot, (*ppSlot) + 1, bytes);
+    // opposite to insertSlot :)
+    freeStart -= sizeof(Slot);
+    freeLength += sizeof(Slot);
+    *ppSlot = nullptr;
+  }
+
 };
 
 struct LeafCell
