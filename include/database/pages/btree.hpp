@@ -143,22 +143,24 @@ private:
 
 static constexpr std::size_t MAX_CELL_PAYLOAD = 32;
 
+union CellPayload {
+  struct {
+    std::array<std::byte, MAX_CELL_PAYLOAD - sizeof(PageId)> payloadStart;
+    PageId overflow;
+  } large;
+
+  std::array<std::byte, MAX_CELL_PAYLOAD> small;
+
+  u32 smallPayloadSize(u32 payloadSize) const {
+    return std::min(payloadSize, static_cast<u32>(MAX_CELL_PAYLOAD));
+  }
+};
+
 struct LeafCell
 {
     u32 payloadSize;
 
-    union CellPayload {
-      struct {
-        std::array<std::byte, MAX_CELL_PAYLOAD - sizeof(PageId)> payloadStart;
-        PageId overflow;
-      } large;
-
-      std::array<std::byte, MAX_CELL_PAYLOAD> small;
-    } payload;
-
-    u32 smallPayloadSize() const {
-      return std::min(payloadSize, static_cast<u32>(MAX_CELL_PAYLOAD));
-    }
+    CellPayload payload;
 
     /* calculate the size of the struct. the payload size might be larger than the max payload,
      * so return the total size of the struct. If it is smaller, return the minimum size of the
@@ -172,12 +174,13 @@ struct LeafCell
     }
 };
 
-static_assert(sizeof(LeafCell::CellPayload::large) == MAX_CELL_PAYLOAD, "Large payload data must fit into MAX_CELL_PAYLOAD");
+static_assert(sizeof(CellPayload::large) == MAX_CELL_PAYLOAD, "Large payload data must fit into MAX_CELL_PAYLOAD");
 
 struct InteriorCell
 {
   PageId leftChild;
-  std::array<std::byte, 4> key;
+  u32 payloadSize;
+  CellPayload payload;
 };
 
 struct BTreeHeader
