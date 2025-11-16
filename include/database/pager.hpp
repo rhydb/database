@@ -58,13 +58,12 @@ struct FreelistPage
   struct Header
   {
     CommonHeader common;
-    PageId next;
+    PageId next = 0;
   };
 
-  Page<Header> page;
+  Page<Header> page = Page<Header>(PageType::Freelist);
 
   explicit FreelistPage(PageId next)
-      : page(PageType::Freelist)
   {
     Header *header = page.header();
     header->next = next;
@@ -85,12 +84,7 @@ struct FirstPage
     DatabaseHeader db;
   };
 
-  Page<Header> page;
-
-  FirstPage()
-      : page(PageType::First)
-  {
-  }
+  Page<Header> page = Page<Header>(PageType::First);
 };
 
 // overflow pages keep a next pointer followed by as much data as can fit
@@ -100,14 +94,11 @@ struct OverflowPage
   {
     CommonHeader common;
     // we don't need to keep track of the size here because the total size is with the cell
+    // TODO: dont store the next pointer on the last page
     PageId next = 0;
   };
 
-  Page<Header> page;
-  OverflowPage()
-      : page(PageType::Overflow)
-  {
-  }
+  Page<Header> page = Page<Header>(PageType::Overflow);
 };
 
 class PageError : std::exception
