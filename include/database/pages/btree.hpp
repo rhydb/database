@@ -3,11 +3,11 @@
 #include "page_header.hpp"
 #include "../pager.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <cassert>
 #include <span>
 #include <functional>
-#include <memory>
 
 // we use the slot numbers in the table b tree for row ids
 // this is used in indexes to then find the row data
@@ -15,7 +15,9 @@ using SlotNum = u16;
 struct Slot
 {
   u16 cellOffset; // from the end of the header
-  u16 cellSize;   // mark as 0 for free
+  /* the size of the cell within the slotted page.
+   * the total size should then be stored in the cell */
+  u16 cellSize;
 };
 
 // not to be used independently
@@ -139,24 +141,43 @@ private:
 
 };
 
+static constexpr std::size_t MAX_CELL_PAYLOAD = 32;
+
 struct LeafCell
 {
-  struct Cell
-  {
     u32 payloadSize;
-    union
-    {
-      u32 key;
-      PageId leaf;
-    };
-  } cell;
-  std::unique_ptr<char[]> data;
+
+    union LeafData {
+      struct {
+        std::array<std::byte, MAX_CELL_PAYLOAD - sizeof(PageId)> payloadStart;
+        PageId overflow;
+      } largePayload;
+
+      std::array<std::byte, MAX_CELL_PAYLOAD> smallPayload;
+    } data;
+
+    u32 smallPayloadSize() const {
+      return std::min(payloadSize, static_cast<u32>(MAX_CELL_PAYLOAD));
+    }
+
+    /* calculate the size of the struct. the payload size might be larger than the max payload,
+     * so return the total size of the struct. If it is smaller, return the minimum size of the
+     * struct and plus the payload size */
+    u32 cellSize() const noexcept {
+      if (payloadSize > MAX_CELL_PAYLOAD) {
+        return sizeof(LeafCell);
+      }
+
+      return sizeof(payloadSize) + payloadSize;
+    }
 };
+
+static_assert(sizeof(LeafCell::LeafData::largePayload) == MAX_CELL_PAYLOAD, "Large payload data must fit into MAX_CELL_PAYLOAD");
 
 struct InteriorCell
 {
   PageId leftChild;
-  u32 key;
+  std::array<std::byte, 4> key;
 };
 
 struct BTreeHeader
@@ -168,7 +189,11 @@ struct BTreeHeader
   BTreeHeader(std::array<std::byte, PAGE_SIZE> array) : slots(std::span<std::byte>(array.data(), array.size())) {}
 };
 static_assert(offsetof(BTreeHeader, common) == 0, "Common header must be at offset 0");
-static constexpr std::size_t MAX_CELL_SIZE = std::max(sizeof(LeafCell), sizeof(InteriorCell)) + 32;
+/* we determine the btree order from the max cell size. this will need to be determined presumably
+ * through benchmarking. Since the payload of the cells is not known, here we are allowing a 32 byte
+ * payload. MAX_CELL_SIZE is the maximum total cell size (i.e. payload size + the payload itself)
+ * within the slotted page's cell. A cell larger than this size is then extended into the overflow page */
+static constexpr std::size_t MAX_CELL_SIZE = std::max(sizeof(LeafCell), sizeof(InteriorCell)) + MAX_CELL_PAYLOAD;
 static constexpr std::size_t BTREE_ORDER = (PAGE_SIZE - sizeof(BTreeHeader)) / (MAX_CELL_SIZE + sizeof(Slot));
 static_assert(BTREE_ORDER > 0, "BTree order must be at least 1");
 

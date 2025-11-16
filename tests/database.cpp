@@ -114,30 +114,28 @@ TEST(Slots, AddSlotsAndCellsUpdatesFreePointers)
   SlotHeader sh = SlotHeader(std::span(buf.data(), buf.size()));
 
   LeafCell cell;
-  cell.cell.key = 123;
-  cell.cell.payloadSize = 20;
-  cell.data = std::make_unique<char[]>(cell.cell.payloadSize);
-  const int totalCellSize = sizeof(cell.cell) + cell.cell.payloadSize;
+  cell.payloadSize = 1;
+  cell.data.smallPayload[0] = static_cast<std::byte>(123);
   
   {
     u16 slotNumber;
-    Slot *slot = sh.createNextSlot(totalCellSize, &slotNumber);
-    slot->cellOffset = sh.createNextCell(totalCellSize);
+    Slot *slot = sh.createNextSlot(cell.cellSize(), &slotNumber);
+    slot->cellOffset = sh.createNextCell(cell.cellSize());
 
-    EXPECT_EQ(totalCellSize, slot->cellSize);
+    EXPECT_EQ(cell.cellSize(), slot->cellSize);
     EXPECT_EQ(0, slotNumber);
-    EXPECT_EQ(buf.size() - totalCellSize, slot->cellOffset);
-    EXPECT_EQ(buf.size() - sizeof(Slot) - totalCellSize, sh.freeLength);
+    EXPECT_EQ(buf.size() - cell.cellSize(), slot->cellOffset);
+    EXPECT_EQ(buf.size() - sizeof(Slot) - cell.cellSize(), sh.freeLength);
     EXPECT_EQ(sizeof(Slot), sh.freeStart);
   }
 
   {
     u16 slotNumber2;
-    Slot *slot2 = sh.createNextSlot(totalCellSize, &slotNumber2);
-    slot2->cellOffset = sh.createNextCell(totalCellSize);
+    Slot *slot2 = sh.createNextSlot(cell.cellSize(), &slotNumber2);
+    slot2->cellOffset = sh.createNextCell(cell.cellSize());
     EXPECT_EQ(1, slotNumber2);
-    EXPECT_EQ(buf.size() - 2*totalCellSize, slot2->cellOffset);
-    EXPECT_EQ(buf.size() - 2*sizeof(Slot) - 2*totalCellSize, sh.freeLength);
+    EXPECT_EQ(buf.size() - 2*cell.cellSize(), slot2->cellOffset);
+    EXPECT_EQ(buf.size() - 2*sizeof(Slot) - 2*cell.cellSize(), sh.freeLength);
     EXPECT_EQ(2*sizeof(Slot), sh.freeStart);
   }
 }
@@ -150,26 +148,25 @@ TEST(Slots, AddThenRead)
   SlotHeader sh = SlotHeader(std::span(buf.data(), buf.size()));
 
   LeafCell cell;
-  cell.cell.key = 123;
-  cell.cell.payloadSize = 20;
-  cell.data = std::make_unique<char[]>(cell.cell.payloadSize);
-  const int totalCellSize = sizeof(cell.cell) + cell.cell.payloadSize;
+  cell.data.smallPayload[0] = static_cast<std::byte>(123);
+  cell.payloadSize = 1;
+  ASSERT_EQ(sizeof(u32) + 1, cell.cellSize());
 
   // create the slot and its cell
   u16 slotNumber;
-  Slot *slot = sh.createNextSlot(totalCellSize, &slotNumber);
-  slot->cellOffset = sh.createNextCell(totalCellSize);
+  Slot *slot = sh.createNextSlot(cell.cellSize(), &slotNumber);
+  slot->cellOffset = sh.createNextCell(cell.cellSize());
   // set the contents of the cell
-  LeafCell::Cell *pCell = reinterpret_cast<LeafCell::Cell*>(sh.getCell(slot->cellOffset)); 
-  *pCell = cell.cell;
+  LeafCell *pCell = reinterpret_cast<LeafCell*>(sh.getCell(slot->cellOffset)); 
+  std::memcpy(pCell, &cell, cell.cellSize());
 
   // read the slot and cell back using the slot number
   Slot readSlot;
-  LeafCell::Cell readCell = *reinterpret_cast<LeafCell::Cell*>(sh.getSlotAndCell(slotNumber, &readSlot));
+  LeafCell readCell = *reinterpret_cast<LeafCell*>(sh.getSlotAndCell(slotNumber, &readSlot));
 
   EXPECT_EQ(reinterpret_cast<intptr_t>(pCell), reinterpret_cast<intptr_t>(buf.data() + slot->cellOffset));
-  EXPECT_EQ(cell.cell.key, readCell.key);
-  EXPECT_EQ(cell.cell.payloadSize, readCell.payloadSize);
+  EXPECT_EQ(cell.payloadSize, readCell.payloadSize);
+  EXPECT_EQ(cell.data.smallPayload[0], readCell.data.smallPayload[0]);
 }
 
 TEST(Slots, OutOfBounds)
@@ -193,9 +190,6 @@ TEST(Slots, Insertion)
 {
   std::array<std::byte, 128> buf;
   SlotHeader sh = SlotHeader(std::span(buf.data(), buf.size()));
-
-  LeafCell cell;
-  cell.cell.key = 123;
 
   struct Cell {
     u16 totalSize;
@@ -240,9 +234,6 @@ TEST(Slots, InsertAfterDelete)
   std::array<std::byte, 128> buf;
   SlotHeader sh = SlotHeader(std::span(buf.data(), buf.size()));
   
-  LeafCell cell;
-  cell.cell.key = 123;
-
   struct Cell {
     u16 totalSize;
     std::array<char, 10> data;
