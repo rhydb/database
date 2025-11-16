@@ -147,14 +147,14 @@ struct LeafCell
 {
     u32 payloadSize;
 
-    union LeafData {
+    union CellPayload {
       struct {
         std::array<std::byte, MAX_CELL_PAYLOAD - sizeof(PageId)> payloadStart;
         PageId overflow;
-      } largePayload;
+      } large;
 
-      std::array<std::byte, MAX_CELL_PAYLOAD> smallPayload;
-    } data;
+      std::array<std::byte, MAX_CELL_PAYLOAD> small;
+    } payload;
 
     u32 smallPayloadSize() const {
       return std::min(payloadSize, static_cast<u32>(MAX_CELL_PAYLOAD));
@@ -172,7 +172,7 @@ struct LeafCell
     }
 };
 
-static_assert(sizeof(LeafCell::LeafData::largePayload) == MAX_CELL_PAYLOAD, "Large payload data must fit into MAX_CELL_PAYLOAD");
+static_assert(sizeof(LeafCell::CellPayload::large) == MAX_CELL_PAYLOAD, "Large payload data must fit into MAX_CELL_PAYLOAD");
 
 struct InteriorCell
 {

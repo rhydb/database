@@ -115,7 +115,7 @@ TEST(Slots, AddSlotsAndCellsUpdatesFreePointers)
 
   LeafCell cell;
   cell.payloadSize = 1;
-  cell.data.smallPayload[0] = static_cast<std::byte>(123);
+  cell.payload.small[0] = static_cast<std::byte>(123);
   
   {
     u16 slotNumber;
@@ -148,7 +148,7 @@ TEST(Slots, AddThenRead)
   SlotHeader sh = SlotHeader(std::span(buf.data(), buf.size()));
 
   LeafCell cell;
-  cell.data.smallPayload[0] = static_cast<std::byte>(123);
+  cell.payload.small[0] = static_cast<std::byte>(123);
   cell.payloadSize = 1;
   ASSERT_EQ(sizeof(u32) + 1, cell.cellSize());
 
@@ -166,7 +166,7 @@ TEST(Slots, AddThenRead)
 
   EXPECT_EQ(reinterpret_cast<intptr_t>(pCell), reinterpret_cast<intptr_t>(buf.data() + slot->cellOffset));
   EXPECT_EQ(cell.payloadSize, readCell.payloadSize);
-  EXPECT_EQ(cell.data.smallPayload[0], readCell.data.smallPayload[0]);
+  EXPECT_EQ(cell.payload.small[0], readCell.payload.small[0]);
 }
 
 TEST(Slots, OutOfBounds)
