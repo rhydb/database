@@ -80,8 +80,11 @@ PageId Pager::nextFree()
   }
 
   // append to file instead
-  m_stream.seekg(0, std::ios::end);
-  m_fSize = m_stream.tellg();
+  if (!m_stream.seekp(0, std::ios::end))
+  {
+    throw std::runtime_error("Failed to get file size for new page");
+  }
+  m_fSize = m_stream.tellp();
   PageId nextId = m_fSize / PAGE_SIZE;
   Page<CommonHeader> newPage;
   setPage(nextId, newPage);
