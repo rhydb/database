@@ -1,7 +1,7 @@
 #include "database/pager.hpp"
 
 Pager::Pager(std::iostream &stream)
-: m_stream(stream) {
+: m_stream(stream), m_pages() {
   // m_stream.open(file, std::ios::in | std::ios::out | std::ios::binary | std::ios::app);
   if (!m_stream)
   {
@@ -18,23 +18,20 @@ Pager::Pager(std::iostream &stream)
   if (m_fSize == 0)
   {
     // new database, write the database header
+    m_pages[0] = Page<>();
+    Page<FirstPage::Header> &firstPage = m_pages[0].as_ref<FirstPage::Header>();
     firstPage.header()->common.type = PageType::First;
-
-    setPage(0, firstPage.as<CommonHeader>());
     flushPage(0, firstPage);
-  }
-  else
-  {
-    firstPage = getPage(0).as<FirstPage::Header>();
   }
 }
 
-Page<>& Pager::getPage(PageId pageNum)
+template<typename H> // page header type
+Page<H>& Pager::getPage(PageId pageNum)
 {
 
   if (m_pages.count(pageNum))
   {
-    return m_pages[pageNum];
+    return reinterpret_cast<Page<H>&>(m_pages[pageNum]);
   }
 
   // read the page and create it in cache
@@ -49,8 +46,10 @@ Page<>& Pager::getPage(PageId pageNum)
     throw PageError(pageNum, "Failed to read");
   }
   
-  return m_pages[pageNum];
+   return reinterpret_cast<Page<H>&>(m_pages[pageNum]);
 }
+template Page<BTreeHeader> &Pager::getPage(PageId);
+template Page<FirstPage::Header> &Pager::getPage(PageId);
 
 void Pager::setPage(PageId pageNum, const Page<> &page) noexcept
 {
@@ -60,6 +59,7 @@ void Pager::setPage(PageId pageNum, const Page<> &page) noexcept
 PageId Pager::nextFree()
 {
   // check the firstPage for the free list, otherwise append to file 
+  Page<FirstPage::Header> &firstPage = m_pages[0].as_ref<FirstPage::Header>();
   PageId freelist = firstPage.header()->db.freelist;
   if (freelist != 0)
   {
@@ -68,7 +68,7 @@ PageId Pager::nextFree()
     if (next.header()->type == PageType::Freelist)
     {
       // update the head of the linked list
-      firstPage.header()->db.freelist = next.as<FreelistPage::Header>().header()->next;
+      firstPage.header()->db.freelist = next.as<FreelistPage::Header>()->header()->next;
       return freelist;
     }
 
@@ -95,7 +95,8 @@ PageId Pager::nextFree()
 
 void Pager::freePage(PageId pageNum)
 {
-  Page<FreelistPage::Header> &page = getPage(pageNum).as<FreelistPage::Header>();
+  Page<FirstPage::Header> &firstPage = m_pages[0].as_ref<FirstPage::Header>();
+  Page<FreelistPage::Header> &page = getPage<FreelistPage::Header>(pageNum);
   page.header()->common.type = Freelist;
 
   // update the linked list

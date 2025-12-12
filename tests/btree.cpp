@@ -168,3 +168,70 @@ TEST(Slots, InsertAfterDelete)
   // the free length has not increased again because the old cell data is still there
   EXPECT_EQ(freeLength - sizeof(Cell), sh.freeLength);
 }
+
+TEST(BTree, PageTypes) {
+  Page<BTreeHeader> root(PageType::Root);
+  EXPECT_EQ(PageType::Root, root.header()->common.type);
+}
+
+TEST(BTree, Search)
+{
+  /* Create this tree:
+   *    [3,_]
+   *   /   \
+   * [2]-->[3,4]
+  */
+  auto interiorComp = std::function([](const InteriorCell &a, const InteriorCell &b){
+      // end slots always go at the end
+      // a < b == true
+      if (a.isEnd()) { return false; }
+      if (b.isEnd()) { return true; }
+      return a.cell.getPayload<u32>() < b.cell.getPayload<u32>();
+  });
+  auto leafComp = std::function([](const LeafCell &a, const LeafCell &b){
+      return a.getPayload<u32>() < b.getPayload<u32>();
+  });
+
+  InteriorNode root;
+  InteriorCell top = InteriorCell(static_cast<u32>(3));
+  const PageId rootId = 1;
+  const PageId leftId = 2;
+  const PageId rightId = 3;
+  top.leftChild = leftId;
+  InteriorCell topEnd = InteriorCell::End();
+  topEnd.leftChild = rightId;
+
+  root.page.header()->slots.insertCell(top, interiorComp);
+  root.page.header()->slots.insertCell(topEnd, interiorComp);
+
+  LeafNode left = LeafNode();
+  left.page.header()->parent = rootId;
+  left.page.header()->slots.insertCell(LeafCell(static_cast<u32>(2)), leafComp);
+  left.setSibling(rightId);
+  LeafNode right = LeafNode();
+  right.page.header()->parent = rootId;
+  right.page.header()->slots.insertCell(LeafCell(static_cast<u32>(3)), leafComp);
+  right.page.header()->slots.insertCell(LeafCell(static_cast<u32>(4)), leafComp);
+
+  std::stringstream mockStream;
+  Pager pager(mockStream);
+  pager.setPage(rootId, root.page.as_ref<CommonHeader>());
+  pager.setPage(leftId, left.page.as_ref<CommonHeader>());
+  pager.setPage(rightId, right.page.as_ref<CommonHeader>());
+
+  // search for 4, should return the `right` leaf node. It will not point directly to 4, or confirm that 4 exists
+  Page<BTreeHeader> &res = root.searchGetLeaf(pager, static_cast<u32>(4));
+  ASSERT_TRUE(res.header()->isLeaf());
+  EXPECT_EQ(rootId, res.header()->parent);
+
+  // make sure its the right leaf node and the cells are in the correct order
+  auto it = res.header()->slots.begin();
+  Slot s1 = *it;
+  NodeCell c1 = NodeCell(res.header()->slots, s1);
+  // 3 comes first
+  EXPECT_EQ(3, c1.getPayload<u32>());
+  it++;
+  Slot s2 = *it;
+  NodeCell c2 = NodeCell(res.header()->slots, s2);
+  EXPECT_EQ(4, c2.getPayload<u32>());
+}

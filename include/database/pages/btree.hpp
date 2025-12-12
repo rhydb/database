@@ -8,6 +8,7 @@
 #include <cassert>
 #include <span>
 #include <functional>
+#include <optional>
 
 // we use the slot numbers in the table b tree for row ids
 // this is used in indexes to then find the row data
@@ -206,31 +207,73 @@ union CellPayload {
   }
 };
 
-struct LeafCell
+/* Generic size+payload cell for any node. Every cell in a leaf node is just this */
+struct NodeCell
 {
     u32 payloadSize;
-
     CellPayload payload;
+
+    template<typename T>
+    explicit NodeCell(T data)
+    {
+      payloadSize = sizeof(T);
+      // TODO: overflow
+      std::memset(payload.small.data(), 0, payload.small.size());
+      std::memcpy(payload.small.data(), &data, payloadSize);
+    }
+
+    NodeCell(const SlotHeader &sh, const Slot& s)
+    {
+      // read the structure of the cell from the slot
+      const std::byte *pCell = sh.readCell(s.cellOffset);
+      payloadSize = *reinterpret_cast<const u32*>(pCell);
+      // TODO overflow. this might be fine, as NodeCell is just a wrapper around what goes into the slots
+      payload = *reinterpret_cast<const CellPayload*>(pCell + sizeof(payloadSize));
+      // if we want to read the entire payload, this is where we could follow `payload.overflow`
+    }
+
+    template<typename T>
+    T getPayload() const noexcept
+    {
+      // TODO: overflow
+      return *reinterpret_cast<const T*>(payload.small.data());
+    }
 
     /* calculate the size of the struct. the payload size might be larger than the max payload,
      * so return the total size of the struct. If it is smaller, return the minimum size of the
      * struct and plus the payload size */
     u32 cellSize() const noexcept {
       if (payloadSize > MAX_CELL_PAYLOAD) {
-        return sizeof(LeafCell);
+        return sizeof(NodeCell);
       }
 
       return sizeof(payloadSize) + payloadSize;
     }
 };
+using LeafCell = NodeCell;
 
 static_assert(sizeof(CellPayload::large) == MAX_CELL_PAYLOAD, "Large payload data must fit into MAX_CELL_PAYLOAD");
 
+/* The cells used in interior nodes. They store the a pointer to their left child in the btree along
+ * with the payload data itself for the key */
 struct InteriorCell
 {
-  PageId leftChild;
-  u32 payloadSize;
-  CellPayload payload;
+  PageId leftChild = 0;
+  NodeCell cell;
+
+  template<typename T>
+  explicit InteriorCell(T data)
+    : cell(data) {}
+
+  bool isEnd() const noexcept { return cell.payloadSize == 0; }
+
+  static InteriorCell End() noexcept
+  {
+    InteriorCell c(0);
+    c.leftChild = 0;
+    c.cell.payloadSize = 0;
+    return c;
+  }
 };
 
 struct BTreeHeader
@@ -239,17 +282,69 @@ struct BTreeHeader
   PageId parent = 0;
   SlotHeader slots;
 
-  BTreeHeader(std::array<std::byte, PAGE_SIZE> array) : slots(std::span<std::byte>(array.data(), array.size())) {}
+  BTreeHeader(std::array<std::byte, PAGE_SIZE> &array)
+    : slots(std::span<std::byte>(
+          array.data() + sizeof(BTreeHeader),
+          array.size() - sizeof(BTreeHeader)
+          )) {}
+
+  bool isRoot() const noexcept { return parent == 0; }
+  bool isLeaf() const noexcept { return common.type == PageType::Leaf; }
 };
 static_assert(offsetof(BTreeHeader, common) == 0, "Common header must be at offset 0");
 /* we determine the btree order from the max cell size. this will need to be determined presumably
  * through benchmarking. Since the payload of the cells is not known, here we are allowing a 32 byte
  * payload. MAX_CELL_SIZE is the maximum total cell size (i.e. payload size + the payload itself)
  * within the slotted page's cell. A cell larger than this size is then extended into the overflow page */
-static constexpr std::size_t MAX_CELL_SIZE = std::max(sizeof(LeafCell), sizeof(InteriorCell)) + MAX_CELL_PAYLOAD;
+static constexpr std::size_t MAX_CELL_SIZE = std::max(sizeof(NodeCell), sizeof(InteriorCell)) + MAX_CELL_PAYLOAD;
 static constexpr std::size_t BTREE_ORDER = (PAGE_SIZE - sizeof(BTreeHeader)) / (MAX_CELL_SIZE + sizeof(Slot));
 static_assert(BTREE_ORDER > 0, "BTree order must be at least 1");
 
+struct InteriorNode
+{
+  Page<BTreeHeader> page = Page<BTreeHeader>(Interior);
+
+  /* find the leaf node a cell value would be located in.
+   * following the leaf linked list is not needed to find the existence of teh value */
+  template<typename V>
+  Page<BTreeHeader>& searchGetLeaf(Pager &pager, const V& Q)
+  {
+    // find the node to follow down
+    // TODO: maybe a binary search here to find the node
+
+    Page<BTreeHeader> &currentPage = this->page;
+    
+    while (!currentPage.header()->isLeaf())
+    {
+      for (const Slot &s : currentPage.header()->slots)
+      {
+        // get the interior cell for this slot
+        assert(s.cellSize == sizeof(InteriorCell) && "Interior search cell should be size of Interior");
+        const InteriorCell interior = *reinterpret_cast<InteriorCell*>(currentPage.header()->slots.getCell(s.cellOffset));
+        assert(interior.leftChild != 0 && "Non leaf node cannot have leaf cell. Tree must be unbalanced");
+        if (interior.isEnd())
+        {
+          // end cell of this node, follow it down
+          currentPage = pager.getPage<BTreeHeader>(interior.leftChild);
+          break;
+        }
+        
+        // TODO: overflow
+        assert(interior.cell.payloadSize == sizeof(V) && "Interior cell payload should be size of search type");
+        // get the payload for the cell - the search value in this node
+        const V value = *reinterpret_cast<const V*>(interior.cell.payload.small.data());
+        if (Q < value)
+        {
+          // follow the slot to the next node
+          currentPage = pager.getPage<BTreeHeader>(interior.leftChild);
+          break;
+        }
+      }
+    }
+
+    return currentPage;
+  }
+};
 
 struct LeafNode
 {

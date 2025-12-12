@@ -14,6 +14,50 @@ TEST_F(TempFileFixture, CreateDatabase) {
   EXPECT_EQ(PageType::First, p.header()->type);
 }
 
+TEST(Pager, GetPageInPlace) {
+  std::stringstream ss;
+  Database db = Database(ss);
+  Page<> &p1 = db.pager.getPage(0);
+  Page<> &p2 = db.pager.getPage(0);
+  p1.buf[0] = static_cast<std::byte>(123);
+  EXPECT_EQ(&p1, &p2);
+  EXPECT_EQ(p1.buf[0], p2.buf[0]);
+  EXPECT_EQ(static_cast<std::byte>(123), p2.buf[0]);
+}
+
+TEST(Pager, AsRef) {
+  InteriorNode i = InteriorNode();
+  Page<> &p = i.page.as_ref<CommonHeader>();
+  EXPECT_EQ(PageType::Interior, i.page.header()->common.type);
+  EXPECT_EQ(PageType::Interior, p.header()->type);
+}
+
+/* nodes should retain their data when being inserted/retrieved from the pager */
+TEST(Pager, NodeTypes) {
+  LeafNode leaf = LeafNode();
+  InteriorNode interior = InteriorNode();
+  const PageId leafId = 1;
+  const PageId interiorId = 2;
+
+  auto leafComp = std::function([](const LeafCell &a, const LeafCell &b){
+      return a.getPayload<u32>() < b.getPayload<u32>();
+  });
+
+  leaf.page.header()->slots.insertCell(LeafCell(static_cast<u32>(2)), leafComp);
+
+  std::stringstream mockStream;
+  Pager pager = Pager(mockStream);
+  pager.setPage(leafId, leaf.page.as_ref<CommonHeader>());
+  pager.setPage(interiorId, interior.page.as_ref<CommonHeader>());
+
+  Page<BTreeHeader> &l2 = pager.getPage<BTreeHeader>(leafId);
+  Page<BTreeHeader> &i2 = pager.getPage<BTreeHeader>(interiorId);
+  EXPECT_EQ(PageType::Leaf, l2.header()->common.type);
+  EXPECT_EQ(PageType::Interior, i2.header()->common.type);
+  EXPECT_EQ(leaf.page.buf, l2.buf);
+  EXPECT_EQ(interior.page.buf, i2.buf);
+}
+
 TEST(Database, InMemory) {
   std::stringstream ss;
   Database db = Database(ss);
@@ -27,7 +71,7 @@ TEST_F(TempFileFixture, Freelist) {
   std::fstream f;
   f.open(path, std::ios::in | std::ios::out | std::ios::binary | std::ios::app);
   Database db = Database(f);
-  Page<FirstPage::Header> &firstPage = db.pager.getPage(0).as<FirstPage::Header>();
+  Page<FirstPage::Header> &firstPage = db.pager.getPage<FirstPage::Header>(static_cast<PageId>(0));
 
   EXPECT_EQ(0, firstPage.header()->db.freelist);
   PageId a = db.pager.nextFree();

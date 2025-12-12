@@ -39,10 +39,19 @@ struct Page
 
   // cast the current header to a different header type
   // this is intended to be used when reading the page from disk and relying on the `type` value
-  template <typename PageHeader>
-  constexpr Page<PageHeader> &as()
+  /* return a pointer to the page, casted to a certain page header type */
+  template<typename H> // pointer to a page header type
+  constexpr Page<H> *as()
   {
-    return *reinterpret_cast<Page<PageHeader> *>(this);
+    return reinterpret_cast<Page<H>*>(this);
+  }
+
+  // when header type is non pointer return a reference to the page instead
+  template<typename H>
+  Page<H> &as_ref()
+  {
+    // return *std::launder(reinterpret_cast<Page<H>*>(this));
+    return reinterpret_cast<Page<H>&>(*this);
   }
 
   Header *header() noexcept
@@ -133,7 +142,9 @@ class Pager
 {
 public:
   u32 fsize() const noexcept { return m_fSize; }
-  Page<> &getPage(PageId pageNum);
+  
+  template<typename H = CommonHeader> // page header type
+  Page<H> &getPage(PageId pageNum);
   void setPage(PageId pageNum, const Page<> &page) noexcept;
 
   template <typename H = CommonHeader>
@@ -161,5 +172,4 @@ private:
   // our cache for the pages
   std::unordered_map<PageId, Page<>> m_pages;
   u32 m_fSize;
-  Page<FirstPage::Header> &firstPage = m_pages[0].as<FirstPage::Header>();
 };
