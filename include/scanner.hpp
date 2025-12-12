@@ -37,7 +37,6 @@ private:
 
 struct Scanner::iterator
 {
-  using iterator_category = std::input_iterator_tag;
   using difference_type = std::ptrdiff_t;
   using value_type = Token;
   using pointer = const Token *;
@@ -46,14 +45,8 @@ struct Scanner::iterator
   explicit iterator(Scanner *scanner);
   iterator() : m_scanner(nullptr), m_isEnd(true), m_cached() {}
 
-  reference operator*() const
-  {
-    return m_cached;
-  }
-  pointer operator->() const
-  {
-    return &m_cached;
-  }
+  reference operator*() const noexcept { return m_cached; }
+  pointer operator->() const noexcept { return &m_cached; }
   iterator &operator++();
   iterator operator++(int);
   friend bool operator==(const iterator &a, const iterator &b)

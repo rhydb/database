@@ -13,7 +13,7 @@ struct BTreeHeader;
 template <typename Header = CommonHeader>
 struct Page
 {
-  std::array<std::byte, PAGE_SIZE> buf;
+  std::array<std::byte, PAGE_SIZE> buf = {static_cast<std::byte>(0)};
 
   Page() : Page(Leaf) {}
 

@@ -39,7 +39,7 @@ inline void writeNetworku16(std::ostream &out, u16 v)
 
 inline bool readNetworku16(std::istream &in, u16 &v)
 {
-  std::array<unsigned char, 2> buf;
+  std::array<unsigned char, 2> buf = {0};
   in.read(reinterpret_cast<char *>(buf.data()), static_cast<std::streamsize>(buf.size()));
   if (!in)
     return false;
@@ -65,7 +65,7 @@ inline bool writeNetworku32(std::ostream &out, u32 v)
 
 inline bool readNetworku32(std::istream &in, u32 &v)
 {
-  std::array<unsigned char, 4> buf;
+  std::array<unsigned char, 4> buf = {0};
   in.read(reinterpret_cast<char *>(buf.data()), static_cast<std::streamsize>(buf.size()));
   if (!in)
     return false;
@@ -107,4 +107,5 @@ public:
     setg(data, data, data + N);
     setp(data, data + N);
   }
+  std::size_t written() const { return pptr() - pbase(); }
 };

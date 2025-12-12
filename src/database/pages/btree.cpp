@@ -4,11 +4,11 @@ Slot *SlotHeader::getSlot(SlotNum slotNumber)
 {
   // go to the end of this header struct, then to the specified slot
   // allow getting the slot on the boundary of freeStart as that's how we get new cells
-  if (slotNumber * sizeof(Slot) > freeStart)
+  if (isSlotOutOfBounds(slotNumber))
   {
     throw std::out_of_range("Slot number out of bounds");
   }
-  return reinterpret_cast<Slot *>(m_data.data() + slotNumber * sizeof(Slot));
+  return reinterpret_cast<Slot *>(buf.data() + slotNumber * sizeof(Slot));
 }
 
 
@@ -23,7 +23,7 @@ void *SlotHeader::getSlotAndCell(SlotNum slotNumber, Slot *retSlot)
 }
 
 
-u16 SlotHeader::createNextCell(u16 cellSize)
+u16 SlotHeader::allocNextCell(u16 cellSize)
 {
   assert(freeLength >= cellSize && "Not enough room in page for new cell");
 
@@ -36,7 +36,7 @@ u16 SlotHeader::createNextCell(u16 cellSize)
 Slot *SlotHeader::createNextSlot(u16 cellSize, u16 *retSlotNum)
 {
   assert(freeLength >= cellSize + sizeof(Slot) && "Not enough room in page for new cell&slot");
-  Slot *slot = reinterpret_cast<Slot *>(m_data.data() + freeStart);
+  Slot *slot = reinterpret_cast<Slot *>(buf.data() + freeStart);
 
   assert(cellSize > 0 && "New slot cannot have cellSize of 0 to not be marked free");
   slot->cellSize = cellSize;

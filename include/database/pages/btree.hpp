@@ -30,17 +30,24 @@ struct SlotHeader
   // data is the region of the page that is used to store slots and cells
   // it does not include the slot header itself or any other data, just slots and cells
   explicit SlotHeader(std::span<std::byte> data)
-      : m_data(data) {
-        freeLength = m_data.size();
+      : buf(data) {
+        freeLength = buf.size();
       }
 
+  bool isSlotOutOfBounds(SlotNum slotNumber) { return slotNumber * sizeof(Slot) > freeStart; }
   Slot *getSlot(SlotNum slotNumber);
   // get a slot and its cell using its number
   void *getSlotAndCell(SlotNum slotNumber, Slot *retSlot);
 
-  inline void *getCell(u16 offset)
+  inline std::byte *getCell(u16 offset)
   {
-    return m_data.data() + offset;
+    return buf.data() + offset;
+  }
+
+  // const version of getCell
+  inline const std::byte *readCell(u16 offset) const
+  {
+    return buf.data() + offset;
   }
 
   // delete the slot from the slot array.
@@ -53,6 +60,7 @@ struct SlotHeader
   // add data to a new cel and create its slot in the sorted position
   // this creates a new cell in the page and assigns a slot to it.
   // the slot will be in its sorted position and may reuse a free slot if one is present
+  // returns the slot the cell was inserted into
   template <typename Cell>
   Slot *insertCell(const Cell &cell, std::function<bool(const Cell &a, const Cell &b)> comparator = std::less<Cell>{}, u16 *retSlotNumber = nullptr)
   {
@@ -83,9 +91,9 @@ struct SlotHeader
     }
 
     s->cellSize = sizeof(Cell);
-    s->cellOffset = createNextCell(sizeof(Cell));
+    s->cellOffset = allocNextCell(sizeof(Cell));
 
-    void *cellDst = getCell(s->cellOffset);
+    std::byte *cellDst = getCell(s->cellOffset);
 
     std::memcpy(cellDst, &cell, sizeof(Cell));
 
@@ -93,7 +101,7 @@ struct SlotHeader
   }
 
   // create a cell of size cellSize from the free space
-  u16 createNextCell(u16 cellSize);
+  u16 allocNextCell(u16 cellSize);
   // create a new slot in the free space
   Slot *createNextSlot(u16 cellSize, u16 *retSlotNum = nullptr);
   // create a new slot and new cell in the free space
@@ -101,16 +109,18 @@ struct SlotHeader
   void *createNextSlotWithCell(u16 cellSize, SlotNum *retSlotNumber);
 
 private:
-  std::span<std::byte> m_data;
+  // TODO: how can we avoid storing this in the struct, so that sizeof returns just the header?
+  // this is important as it affects the other headers
+  std::span<std::byte> buf;
 
   SlotNum slotNumber(const Slot *s)
   {
     // how many slots between the header end and s
     assert(
-        reinterpret_cast<intptr_t>(s) >= reinterpret_cast<intptr_t>(m_data.data())
-        && reinterpret_cast<intptr_t>(s) <= reinterpret_cast<intptr_t>(m_data.data() + m_data.size())
+        reinterpret_cast<intptr_t>(s) >= reinterpret_cast<intptr_t>(buf.data())
+        && reinterpret_cast<intptr_t>(s) <= reinterpret_cast<intptr_t>(buf.data() + buf.size())
         && "Slot pointer out of bounds to retrieve slot number");
-    return (reinterpret_cast<intptr_t>(s) - reinterpret_cast<intptr_t>(m_data.data())) / sizeof(Slot);
+    return (reinterpret_cast<intptr_t>(s) - reinterpret_cast<intptr_t>(buf.data())) / sizeof(Slot);
   }
 
   Slot *insertSlot(SlotNum slotNum)

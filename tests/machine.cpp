@@ -62,7 +62,7 @@ TEST(NetworkU32, WriteReadArray)
   ASSERT_EQ(bytes.size(), src.size() * sizeof(std::uint32_t));
 
   std::istringstream in(bytes, std::ios_base::binary);
-  std::array<std::uint32_t, 3> dst{};
+  std::array<std::uint32_t, 3> dst = {0};
   ASSERT_TRUE(readNetworku32(in, dst));
   EXPECT_EQ(dst, src);
 }

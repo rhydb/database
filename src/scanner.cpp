@@ -349,7 +349,7 @@ Scanner::iterator Scanner::end() { return iterator(); }
 
 Scanner::iterator::iterator(Scanner *scanner) : m_scanner(scanner), m_isEnd(false), m_cached()
 {
-  if (!scanner || scanner->peek() == '\0')
+  if (scanner == nullptr || scanner->peek() == '\0')
   {
     m_isEnd = true;
     return;
@@ -364,7 +364,7 @@ Scanner::iterator::iterator(Scanner *scanner) : m_scanner(scanner), m_isEnd(fals
 
 Scanner::iterator& Scanner::iterator::operator++()
 {
-    if (m_isEnd || !m_scanner)
+    if (m_isEnd || m_scanner == nullptr)
     {
       return *this;
     }
