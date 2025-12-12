@@ -10,8 +10,7 @@
 // template the header so that we can retrieve it easily
 struct BTreeHeader;
 
-template <typename Header = CommonHeader>
-struct Page
+template <typename Header = CommonHeader> struct Page
 {
   std::array<std::byte, PAGE_SIZE> buf = {static_cast<std::byte>(0)};
 
@@ -26,9 +25,12 @@ struct Page
     // setup the custom header
 
     Header *h = header();
-    if constexpr (std::is_same_v<Header, BTreeHeader>) {
+    if constexpr (std::is_same_v<Header, BTreeHeader>)
+    {
       *h = Header(buf);
-    } else {
+    }
+    else
+    {
       *h = Header();
     }
 
@@ -40,26 +42,21 @@ struct Page
   // cast the current header to a different header type
   // this is intended to be used when reading the page from disk and relying on the `type` value
   /* return a pointer to the page, casted to a certain page header type */
-  template<typename H> // pointer to a page header type
+  template <typename H> // pointer to a page header type
   constexpr Page<H> *as()
   {
-    return reinterpret_cast<Page<H>*>(this);
+    return reinterpret_cast<Page<H> *>(this);
   }
 
   // when header type is non pointer return a reference to the page instead
-  template<typename H>
-  Page<H> &as_ref()
+  template <typename H> Page<H> &as_ref()
   {
     // return *std::launder(reinterpret_cast<Page<H>*>(this));
-    return reinterpret_cast<Page<H>&>(*this);
+    return reinterpret_cast<Page<H> &>(*this);
   }
 
-  Header *header() noexcept
-  {
-    return reinterpret_cast<Header *>(buf.data());
-  }
+  Header *header() noexcept { return reinterpret_cast<Header *>(buf.data()); }
 };
-
 
 // the freelist pages are kept as a linked list with the head stored in the `DatabaseHeader`
 struct FreelistPage
@@ -78,10 +75,7 @@ struct FreelistPage
     header->next = next;
   }
 
-  inline PageId next()
-  {
-    return page.header()->next;
-  }
+  inline PageId next() { return page.header()->next; }
 };
 
 // the first page of the document file located at offset 0
@@ -117,23 +111,16 @@ private:
   PageId m_id;
 
 public:
-  PageError(PageId id, const char *message)
-      : m_id(id)
+  PageError(PageId id, const char *message) : m_id(id)
   {
     std::ostringstream ss;
     ss << "Page " << id << ": " << message << std::endl;
     m_message = ss.str();
   }
 
-  inline PageId id()
-  {
-    return m_id;
-  }
+  inline PageId id() { return m_id; }
 
-  const char *what() const noexcept override
-  {
-    return m_message.c_str();
-  }
+  const char *what() const noexcept override { return m_message.c_str(); }
 };
 
 // manages the pages for the database
@@ -142,13 +129,12 @@ class Pager
 {
 public:
   u32 fsize() const noexcept { return m_fSize; }
-  
-  template<typename H = CommonHeader> // page header type
+
+  template <typename H = CommonHeader> // page header type
   Page<H> &getPage(PageId pageNum);
   void setPage(PageId pageNum, const Page<> &page) noexcept;
 
-  template <typename H = CommonHeader>
-  void flushPage(u32 pageNum, const Page<H> &page)
+  template <typename H = CommonHeader> void flushPage(u32 pageNum, const Page<H> &page)
   {
     if (!m_stream.seekp(pageNum * PAGE_SIZE))
     {

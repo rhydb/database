@@ -1,15 +1,16 @@
 #include "database/pager.hpp"
 
 Pager::Pager(std::iostream &stream)
-: m_stream(stream), m_pages() {
+    : m_stream(stream), m_pages()
+{
   // m_stream.open(file, std::ios::in | std::ios::out | std::ios::binary | std::ios::app);
   if (!m_stream)
   {
     throw std::runtime_error("Failed to open database file.");
   }
- 
+
   m_stream.seekg(0, std::ios::end);
-  m_fSize =  m_stream.tellg();
+  m_fSize = m_stream.tellg();
   if (!m_stream)
   {
     throw std::runtime_error("Failed to get size of database file.");
@@ -25,13 +26,13 @@ Pager::Pager(std::iostream &stream)
   }
 }
 
-template<typename H> // page header type
-Page<H>& Pager::getPage(PageId pageNum)
+template <typename H> // page header type
+Page<H> &Pager::getPage(PageId pageNum)
 {
 
   if (m_pages.count(pageNum))
   {
-    return reinterpret_cast<Page<H>&>(m_pages[pageNum]);
+    return reinterpret_cast<Page<H> &>(m_pages[pageNum]);
   }
 
   // read the page and create it in cache
@@ -41,12 +42,12 @@ Page<H>& Pager::getPage(PageId pageNum)
   {
     throw PageError(pageNum, "Failed in seeking to read");
   }
-  if (!m_stream.read(reinterpret_cast<char*>(m_pages[pageNum].buf.data()), m_pages[pageNum].buf.size()))
+  if (!m_stream.read(reinterpret_cast<char *>(m_pages[pageNum].buf.data()), m_pages[pageNum].buf.size()))
   {
     throw PageError(pageNum, "Failed to read");
   }
-  
-   return reinterpret_cast<Page<H>&>(m_pages[pageNum]);
+
+  return reinterpret_cast<Page<H> &>(m_pages[pageNum]);
 }
 template Page<BTreeHeader> &Pager::getPage(PageId);
 template Page<FirstPage::Header> &Pager::getPage(PageId);
@@ -58,7 +59,7 @@ void Pager::setPage(PageId pageNum, const Page<> &page) noexcept
 
 PageId Pager::nextFree()
 {
-  // check the firstPage for the free list, otherwise append to file 
+  // check the firstPage for the free list, otherwise append to file
   Page<FirstPage::Header> &firstPage = m_pages[0].as_ref<FirstPage::Header>();
   PageId freelist = firstPage.header()->db.freelist;
   if (freelist != 0)
@@ -100,7 +101,7 @@ void Pager::freePage(PageId pageNum)
   page.header()->common.type = Freelist;
 
   // update the linked list
-  page.header()->next = firstPage.header()->db.freelist;;
+  page.header()->next = firstPage.header()->db.freelist;
   firstPage.header()->db.freelist = pageNum;
   // TODO do we need to flush these now?
   // flushPage(pageNum, page);

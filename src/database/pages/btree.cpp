@@ -11,7 +11,6 @@ Slot *SlotHeader::getSlot(SlotNum slotNumber)
   return reinterpret_cast<Slot *>(buf.data() + slotNumber * sizeof(Slot));
 }
 
-
 void *SlotHeader::getSlotAndCell(SlotNum slotNumber, Slot *retSlot)
 {
   Slot *s = getSlot(slotNumber);
@@ -21,7 +20,6 @@ void *SlotHeader::getSlotAndCell(SlotNum slotNumber, Slot *retSlot)
   }
   return getCell(s->cellOffset);
 }
-
 
 u16 SlotHeader::allocNextCell(u16 cellSize)
 {
@@ -79,7 +77,8 @@ SlotHeader::iterator SlotHeader::begin() { return iterator(this); }
 SlotHeader::iterator SlotHeader::end() { return iterator(); }
 
 SlotHeader::iterator::iterator(SlotHeader *slots) noexcept
-: m_slots(slots) {
+    : m_slots(slots)
+{
   if (slots == nullptr || slots->isEmpty() || slots->isSlotOutOfBounds(0))
   {
     m_isEnd = true;
@@ -89,7 +88,7 @@ SlotHeader::iterator::iterator(SlotHeader *slots) noexcept
   m_current = *slots->getSlot(0);
 }
 
-SlotHeader::iterator& SlotHeader::iterator::operator++()
+SlotHeader::iterator &SlotHeader::iterator::operator++()
 {
   if (m_isEnd || m_slots == nullptr)
     return *this;
