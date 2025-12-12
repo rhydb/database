@@ -18,14 +18,26 @@ struct Slot
   /* the size of the cell within the slotted page.
    * the total size should then be stored in the cell */
   u16 cellSize;
+
+  friend bool operator==(const Slot &a, const Slot &b)
+  {
+    return a.cellOffset == b.cellOffset && a.cellSize == b.cellSize;
+  }
 };
 
 // not to be used independently
 // used for page types to support slots
 struct SlotHeader
 {
+  struct iterator;
+  iterator begin();
+  iterator end();
+
   u16 freeStart = 0; // offset from end of header
   u16 freeLength;    // marked as free if both 0
+
+  bool isEmpty() const noexcept { return freeStart == 0; }
+  bool isFree() const noexcept { return freeStart == 0 && freeLength == 0; }
 
   // data is the region of the page that is used to store slots and cells
   // it does not include the slot header itself or any other data, just slots and cells
@@ -149,6 +161,34 @@ private:
     *ppSlot = nullptr;
   }
 
+};
+
+struct SlotHeader::iterator
+{
+  using difference_type = SlotNum;
+  using pointer = const Slot *;
+  using reference = const Slot &;
+
+  explicit iterator(SlotHeader *slots) noexcept;
+  iterator() : m_slots(nullptr), m_isEnd(true), m_current() {}
+
+  reference operator*() const noexcept { return m_current; }
+  pointer operator->() const noexcept { return &m_current; }
+  iterator &operator++();
+  iterator operator++(int);
+  friend bool operator==(const iterator &a, const iterator &b)
+  {
+    if (a.m_isEnd && b.m_isEnd)
+      return true;
+    return a.m_isEnd == b.m_isEnd && a.m_slots == b.m_slots && a.m_current == b.m_current; 
+  }
+  friend bool operator!=(const iterator &a, const iterator &b) { return !(a == b); }
+
+private:
+  SlotHeader *m_slots = nullptr;
+  bool m_isEnd = false;
+  Slot m_current;
+  SlotNum m_currentNum = 0;
 };
 
 static constexpr std::size_t MAX_CELL_PAYLOAD = 32;

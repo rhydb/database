@@ -74,3 +74,42 @@ void *SlotHeader::createNextSlotWithCell(u16 cellSize, SlotNum *retSlotNumber)
 
   return headerEnd + slot->cellOffset;
 }
+
+SlotHeader::iterator SlotHeader::begin() { return iterator(this); }
+SlotHeader::iterator SlotHeader::end() { return iterator(); }
+
+SlotHeader::iterator::iterator(SlotHeader *slots) noexcept
+: m_slots(slots) {
+  if (slots == nullptr || slots->isEmpty() || slots->isSlotOutOfBounds(0))
+  {
+    m_isEnd = true;
+    return;
+  }
+
+  m_current = *slots->getSlot(0);
+}
+
+SlotHeader::iterator& SlotHeader::iterator::operator++()
+{
+  if (m_isEnd || m_slots == nullptr)
+    return *this;
+
+  m_currentNum++;
+  if (m_slots->isSlotOutOfBounds(m_currentNum))
+  {
+    m_isEnd = true;
+  }
+  else
+  {
+    m_current = *m_slots->getSlot(m_currentNum);
+  }
+
+  return *this;
+}
+
+SlotHeader::iterator SlotHeader::iterator::operator++(int)
+{
+  iterator tmp = *this;
+  ++(*this);
+  return tmp;
+}
