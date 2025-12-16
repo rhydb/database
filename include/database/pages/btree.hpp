@@ -25,6 +25,10 @@ struct Slot
   }
 };
 
+struct InteriorCell;
+struct NodeCell;
+using LeafCell = NodeCell;
+
 // not to be used independently
 // used for page types to support slots
 struct SlotHeader
@@ -104,6 +108,9 @@ struct SlotHeader
 
     return s;
   }
+
+  template <typename P> Slot *insertCell(const InteriorCell &cell, u16 *retSlotNumber = nullptr);
+  template <typename P> Slot *insertCell(const LeafCell &cell, u16 *retSlotNumber = nullptr);
 
   // create a cell of size cellSize from the free space
   u16 allocNextCell(u16 cellSize);
@@ -244,7 +251,6 @@ struct NodeCell
     return sizeof(payloadSize) + payloadSize;
   }
 };
-using LeafCell = NodeCell;
 
 static_assert(sizeof(CellPayload::large) == MAX_CELL_PAYLOAD,
               "Large payload data must fit into MAX_CELL_PAYLOAD");
@@ -381,3 +387,36 @@ private:
     return reinterpret_cast<Reserved *>(page.buf.data() + page.buf.size() - sizeof(Reserved));
   }
 };
+
+template <typename P> Slot *SlotHeader::insertCell(const InteriorCell &cell, u16 *retSlotNumber)
+{
+  // TODO: can we use the operator< for InteriorCell instead?
+  // since they both have to be the same payload type
+  const auto interiorComp = std::function(
+      [](const InteriorCell &a, const InteriorCell &b)
+      {
+        // end slots always go at the end
+        // a < b == true
+        if (a.isEnd())
+        {
+          return false;
+        }
+        if (b.isEnd())
+        {
+          return true;
+        }
+        return a.cell.getPayload<P>() < b.cell.getPayload<P>();
+      });
+
+  return insertCell(cell, interiorComp, retSlotNumber);
+}
+
+template <typename P> Slot *SlotHeader::insertCell(const LeafCell &cell, u16 *retSlotNumber)
+{
+  // TODO: can we use the operator< for LeafCell instead?
+  // since they both have to be the same payload type
+  const auto leafComp = std::function([](const LeafCell &a, const LeafCell &b)
+                                      { return a.getPayload<P>() < b.getPayload<P>(); });
+
+  return insertCell(cell, leafComp, retSlotNumber);
+}

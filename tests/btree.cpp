@@ -181,17 +181,6 @@ TEST(BTree, Search)
    *   /   \
    * [2]-->[3,4]
   */
-  auto interiorComp = std::function([](const InteriorCell &a, const InteriorCell &b){
-      // end slots always go at the end
-      // a < b == true
-      if (a.isEnd()) { return false; }
-      if (b.isEnd()) { return true; }
-      return a.cell.getPayload<u32>() < b.cell.getPayload<u32>();
-  });
-  auto leafComp = std::function([](const LeafCell &a, const LeafCell &b){
-      return a.getPayload<u32>() < b.getPayload<u32>();
-  });
-
   InteriorNode root;
   InteriorCell top = InteriorCell(static_cast<u32>(3));
   const PageId rootId = 1;
@@ -201,17 +190,17 @@ TEST(BTree, Search)
   InteriorCell topEnd = InteriorCell::End();
   topEnd.leftChild = rightId;
 
-  root.page.header()->slots.insertCell(top, interiorComp);
-  root.page.header()->slots.insertCell(topEnd, interiorComp);
+  root.page.header()->slots.insertCell<u32>(top);
+  root.page.header()->slots.insertCell<u32>(topEnd);
 
   LeafNode left = LeafNode();
   left.page.header()->parent = rootId;
-  left.page.header()->slots.insertCell(LeafCell(static_cast<u32>(2)), leafComp);
+  left.page.header()->slots.insertCell<u32>(LeafCell(static_cast<u32>(2)));
   left.setSibling(rightId);
   LeafNode right = LeafNode();
   right.page.header()->parent = rootId;
-  right.page.header()->slots.insertCell(LeafCell(static_cast<u32>(3)), leafComp);
-  right.page.header()->slots.insertCell(LeafCell(static_cast<u32>(4)), leafComp);
+  right.page.header()->slots.insertCell<u32>(LeafCell(static_cast<u32>(3)));
+  right.page.header()->slots.insertCell<u32>(LeafCell(static_cast<u32>(4)));
 
   std::stringstream mockStream;
   Pager pager(mockStream);
@@ -229,9 +218,11 @@ TEST(BTree, Search)
   Slot s1 = *it;
   NodeCell c1 = NodeCell(res.header()->slots, s1);
   // 3 comes first
+  EXPECT_EQ(sizeof(u32), c1.payloadSize);
   EXPECT_EQ(3, c1.getPayload<u32>());
-  it++;
+  ++it;
   Slot s2 = *it;
   NodeCell c2 = NodeCell(res.header()->slots, s2);
+  EXPECT_EQ(sizeof(u32), c2.payloadSize);
   EXPECT_EQ(4, c2.getPayload<u32>());
 }
