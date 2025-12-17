@@ -174,12 +174,13 @@ TEST(BTree, PageTypes) {
   EXPECT_EQ(PageType::Root, root.header()->common.type);
 }
 
-TEST(BTree, Search)
+TEST(BTree, SearchGetLeaf)
 {
   /* Create this tree:
    *    [3,_]
    *   /   \
    * [2]-->[3,4]
+   * Search for 3
   */
   InteriorNode root;
   InteriorCell top = InteriorCell(static_cast<u32>(3));
@@ -225,4 +226,19 @@ TEST(BTree, Search)
   NodeCell c2 = NodeCell(res.header()->slots, s2);
   EXPECT_EQ(sizeof(u32), c2.payloadSize);
   EXPECT_EQ(4, c2.getPayload<u32>());
+}
+
+TEST(BTree, SearchInLeafGetSlot)
+{
+  LeafNode l = LeafNode();
+  l.page.header()->slots.insertCell<u32>(LeafCell(static_cast<u32>(3)));
+  l.page.header()->slots.insertCell<u32>(LeafCell(static_cast<u32>(4)));
+
+  LeafCell q = LeafCell(static_cast<u32>(4));
+  auto res = l.searchGetSlot(q);
+  ASSERT_TRUE(res.has_value());
+  auto [pSlot, pCell] = res.value();
+  ASSERT_TRUE(nullptr != pSlot);
+  ASSERT_TRUE(nullptr != pCell);
+  EXPECT_EQ(sizeof(LeafCell), pSlot->cellSize);
 }

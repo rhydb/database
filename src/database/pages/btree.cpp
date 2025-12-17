@@ -73,6 +73,24 @@ void *SlotHeader::createNextSlotWithCell(u16 cellSize, SlotNum *retSlotNumber)
   return headerEnd + slot->cellOffset;
 }
 
+std::optional<std::pair<Slot*,LeafCell*>> LeafNode::searchGetSlot(const LeafCell &Q)
+{
+  // TODO: binary search?
+  for (Slot &s : page.header()->slots)
+  {
+    // TODO: overflow
+    LeafCell *c = reinterpret_cast<LeafCell*>(page.header()->slots.getCell(s.cellOffset));
+    // TODO: ordering
+    if (Q.payload.small == c->payload.small)
+    {
+      // TODO: overflow
+      return std::pair(&s, c);
+    }
+  }
+
+  return std::nullopt;
+}
+
 SlotHeader::iterator SlotHeader::begin() { return iterator(this); }
 SlotHeader::iterator SlotHeader::end() { return iterator(); }
 
@@ -85,7 +103,7 @@ SlotHeader::iterator::iterator(SlotHeader *slots) noexcept
     return;
   }
 
-  m_current = *slots->getSlot(0);
+  m_current = slots->getSlot(0);
 }
 
 SlotHeader::iterator &SlotHeader::iterator::operator++()
@@ -94,13 +112,13 @@ SlotHeader::iterator &SlotHeader::iterator::operator++()
     return *this;
 
   m_currentNum++;
-  if (m_slots->isSlotOutOfBounds(m_currentNum))
+  if (m_currentNum >= (m_slots->freeStart / sizeof(Slot)))
   {
     m_isEnd = true;
   }
   else
   {
-    m_current = *m_slots->getSlot(m_currentNum);
+    m_current = m_slots->getSlot(m_currentNum);
   }
 
   return *this;

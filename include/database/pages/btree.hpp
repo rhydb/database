@@ -8,6 +8,7 @@
 #include <cassert>
 #include <span>
 #include <functional>
+#include <optional>
 
 // we use the slot numbers in the table b tree for row ids
 // this is used in indexes to then find the row data
@@ -164,14 +165,14 @@ private:
 struct SlotHeader::iterator
 {
   using difference_type = SlotNum;
-  using pointer = const Slot *;
-  using reference = const Slot &;
+  using pointer = Slot *;
+  using reference = Slot &;
 
   explicit iterator(SlotHeader *slots) noexcept;
   iterator() : m_slots(nullptr), m_isEnd(true), m_current() {}
 
-  reference operator*() const noexcept { return m_current; }
-  pointer operator->() const noexcept { return &m_current; }
+  reference operator*() noexcept { return *m_current; }
+  pointer operator->() noexcept { return m_current; }
   iterator &operator++();
   iterator operator++(int);
   friend bool operator==(const iterator &a, const iterator &b)
@@ -185,7 +186,7 @@ struct SlotHeader::iterator
 private:
   SlotHeader *m_slots = nullptr;
   bool m_isEnd = false;
-  Slot m_current;
+  Slot *m_current;
   SlotNum m_currentNum = 0;
 };
 
@@ -307,7 +308,7 @@ struct InteriorNode
   Page<BTreeHeader> page = Page<BTreeHeader>(Interior);
 
   /* find the leaf node a cell value would be located in.
-   * following the leaf linked list is not needed to find the existence of teh value */
+   * following the leaf linked list is not needed to find the existence of the value */
   template <typename V> Page<BTreeHeader> &searchGetLeaf(Pager &pager, const V &Q)
   {
     // find the node to follow down
@@ -380,6 +381,9 @@ struct LeafNode
     Reserved *r = reserved();
     r->sibling = sibling;
   }
+
+  /* find the slot for Q and return the slot and cell */
+  std::optional<std::pair<Slot*,LeafCell*>> searchGetSlot(const LeafCell &Q);
 
 private:
   inline Reserved *reserved()
