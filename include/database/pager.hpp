@@ -25,14 +25,7 @@ template <typename Header = CommonHeader> struct Page
     // setup the custom header
 
     Header *h = header();
-    if constexpr (std::is_same_v<Header, BTreeHeader>)
-    {
-      *h = Header(buf);
-    }
-    else
-    {
-      *h = Header();
-    }
+    *h = Header();
 
     // setup the common header
     CommonHeader *ch = reinterpret_cast<CommonHeader *>(h);
@@ -149,6 +142,15 @@ public:
   }
 
   [[nodiscard]] PageId nextFree();
+  template <typename H>
+  Page<H> &nextFree()
+  {
+    PageId id = nextFree();
+    Page<H> &newPage = getPage<H>(id);
+    newPage = Page<H>();
+    flushPage(id, newPage); // write the updated page header
+    return newPage;
+  }
   void freePage(PageId pageNum);
 
   explicit Pager(std::iostream &stream);

@@ -39,11 +39,7 @@ TEST(Pager, NodeTypes) {
   const PageId leafId = 1;
   const PageId interiorId = 2;
 
-  auto leafComp = std::function([](const LeafCell &a, const LeafCell &b){
-      return a.getPayload<u32>() < b.getPayload<u32>();
-  });
-
-  leaf.page.header()->slots.insertCell(LeafCell(static_cast<u32>(2)), leafComp);
+  leaf.page.header()->slots.insertCell(LeafCell(static_cast<u32>(2)));
 
   std::stringstream mockStream;
   Pager pager = Pager(mockStream);

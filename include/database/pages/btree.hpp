@@ -3,6 +3,7 @@
 #include "page_header.hpp"
 #include "../pager.hpp"
 
+#include <any>
 #include <algorithm>
 #include <cstring>
 #include <cassert>
@@ -26,37 +27,51 @@ struct Slot
   }
 };
 
-struct InteriorCell;
-struct NodeCell;
-using LeafCell = NodeCell;
+template <typename T> struct InteriorCell;
+template <typename T> struct NodeCell;
+template <typename T> using LeafCell = NodeCell<T>;
 
 // not to be used independently
 // used for page types to support slots
-struct SlotHeader
+// data is the region of the page that is used to store slots and cells
+// it does not include the slot header itself or any other data, just slots and cells
+template <std::size_t bufsize> struct SlotHeader
 {
   struct iterator;
-  iterator begin();
-  iterator end();
+  iterator begin() { return iterator(this); }
+  iterator end() { return iterator(); }
 
   u16 freeStart = 0; // offset from end of header
-  u16 freeLength;    // marked as free if both 0
+  u16 freeLength = bufsize;    // marked as free if both 0
 
   bool isEmpty() const noexcept { return freeStart == 0; }
   bool isFree() const noexcept { return freeStart == 0 && freeLength == 0; }
-
-  // data is the region of the page that is used to store slots and cells
-  // it does not include the slot header itself or any other data, just slots and cells
-  explicit SlotHeader(std::span<std::byte> data) : buf(data) { freeLength = buf.size(); }
+  int entryCount() const noexcept { return freeStart / sizeof(Slot); }
 
   bool isSlotOutOfBounds(SlotNum slotNumber) { return slotNumber * sizeof(Slot) > freeStart; }
-  Slot *getSlot(SlotNum slotNumber);
+  Slot *getSlot(SlotNum slotNumber)
+  {
+    if (isSlotOutOfBounds(slotNumber))
+    {
+      throw std::out_of_range("Slot number out of bounds");
+    }
+    return reinterpret_cast<Slot *>(buf().data() + slotNumber * sizeof(Slot));
+  }
   // get a slot and its cell using its number
-  void *getSlotAndCell(SlotNum slotNumber, Slot *retSlot);
+  void *getSlotAndCell(SlotNum slotNumber, Slot *retSlot)
+  {
+    Slot *s = getSlot(slotNumber);
+    if (retSlot != nullptr)
+    {
+      *retSlot = *s;
+    }
+    return getCell(s->cellOffset);
+  }
 
-  inline std::byte *getCell(u16 offset) { return buf.data() + offset; }
+  inline std::byte *getCell(u16 offset) { return buf().data() + offset; }
 
   // const version of getCell
-  inline const std::byte *readCell(u16 offset) const { return buf.data() + offset; }
+  inline const std::byte *readCell(u16 offset) const { return buf().data() + offset; }
 
   // delete the slot from the slot array.
   void deleteSlot(SlotNum slotNum)
@@ -110,29 +125,72 @@ struct SlotHeader
     return s;
   }
 
-  template <typename P> Slot *insertCell(const InteriorCell &cell, u16 *retSlotNumber = nullptr);
-  template <typename P> Slot *insertCell(const LeafCell &cell, u16 *retSlotNumber = nullptr);
+  template <typename P> Slot *insertCell(const InteriorCell<P> &cell, u16 *retSlotNumber = nullptr);
+  template <typename P> Slot *insertCell(const LeafCell<P> &cell, u16 *retSlotNumber = nullptr);
 
   // create a cell of size cellSize from the free space
-  u16 allocNextCell(u16 cellSize);
-  // create a new slot in the free space
-  Slot *createNextSlot(u16 cellSize, u16 *retSlotNum = nullptr);
-  // create a new slot and new cell in the free space
-  // assigns the slot to the newly created cell
-  void *createNextSlotWithCell(u16 cellSize, SlotNum *retSlotNumber);
+  u16 allocNextCell(u16 cellSize)
+  {
+    assert(freeLength >= cellSize && "Not enough room in page for new cell");
+
+    const u16 cellOffset = freeStart + freeLength - cellSize;
+    freeLength -= cellSize;
+
+    return cellOffset;
+  }
+  /* allocate the next slot and set its cellSize
+   * returns the new Slot created and optionally its slot number */
+  Slot *createNextSlot(u16 cellSize, u16 *retSlotNum = nullptr)
+  {
+    assert(freeLength >= cellSize + sizeof(Slot) && "Not enough room in page for new cell&slot");
+    Slot *slot = reinterpret_cast<Slot *>(buf().data() + freeStart);
+
+    slot->cellSize = cellSize;
+
+    // shrinks from both sides
+    freeStart += sizeof(Slot);
+    freeLength -= sizeof(Slot);
+
+    if (retSlotNum != nullptr)
+    {
+      *retSlotNum = slotNumber(slot);
+    }
+
+    return slot;
+  }
+
+  /* like createNextSlot, but also allocates its cell, and sets the slot's cell offset.
+   * returns the newly created cell and optionally the slot number */
+  void *createNextSlotWithCell(u16 cellSize, SlotNum *retSlotNumber)
+  {
+    assert(freeLength >= cellSize + sizeof(Slot) && "Not enough room in page for new cell&slot");
+    Slot *s = createNextSlot(cellSize, retSlotNumber);
+    s->cellOffset = allocNextCell(cellSize);
+    return getCell(s->cellOffset);
+  }
+
 
 private:
   // TODO: how can we avoid storing this in the struct, so that sizeof returns just the header?
   // this is important as it affects the other headers
-  std::span<std::byte> buf;
+
+  std::span<std::byte> buf() noexcept
+  {
+    return std::span<std::byte>(reinterpret_cast<std::byte *>(this + 1), bufsize);
+  }
+
+  std::span<const std::byte> buf() const noexcept
+  {
+    return std::span<const std::byte>(reinterpret_cast<const std::byte *>(this + 1), bufsize);
+  }
 
   SlotNum slotNumber(const Slot *s)
   {
     // how many slots between the header end and s
-    assert(reinterpret_cast<intptr_t>(s) >= reinterpret_cast<intptr_t>(buf.data()) &&
-           reinterpret_cast<intptr_t>(s) <= reinterpret_cast<intptr_t>(buf.data() + buf.size()) &&
+    assert(reinterpret_cast<intptr_t>(s) >= reinterpret_cast<intptr_t>(buf().data()) &&
+           reinterpret_cast<intptr_t>(s) <= reinterpret_cast<intptr_t>(buf().data() + buf().size()) &&
            "Slot pointer out of bounds to retrieve slot number");
-    return (reinterpret_cast<intptr_t>(s) - reinterpret_cast<intptr_t>(buf.data())) / sizeof(Slot);
+    return (reinterpret_cast<intptr_t>(s) - reinterpret_cast<intptr_t>(buf().data())) / sizeof(Slot);
   }
 
   Slot *insertSlot(SlotNum slotNum)
@@ -162,19 +220,51 @@ private:
   }
 };
 
-struct SlotHeader::iterator
+template <std::size_t BS> struct SlotHeader<BS>::iterator
 {
   using difference_type = SlotNum;
   using pointer = Slot *;
   using reference = Slot &;
 
-  explicit iterator(SlotHeader *slots) noexcept;
+  explicit iterator(SlotHeader *slots) noexcept
+  : m_slots(slots) {
+    if (slots == nullptr || slots->isEmpty() || slots->isSlotOutOfBounds(0))
+    {
+      m_isEnd = true;
+      return;
+    }
+
+    m_current = slots->getSlot(0);
+  }
   iterator() : m_slots(nullptr), m_isEnd(true), m_current() {}
+  static iterator end() { return iterator(); }
 
   reference operator*() noexcept { return *m_current; }
   pointer operator->() noexcept { return m_current; }
-  iterator &operator++();
-  iterator operator++(int);
+  iterator &operator++() { return (*this) + 1; }
+  iterator operator++(int)
+  {
+    iterator tmp = *this;
+    ++(*this);
+    return tmp;
+  }
+  iterator &operator+(int n)
+  {
+    if (m_isEnd || m_slots == nullptr)
+      return *this;
+
+    m_currentNum += n;
+    if (m_currentNum >= (m_slots->freeStart / sizeof(Slot)))
+    {
+      m_isEnd = true;
+    }
+    else
+    {
+      m_current = m_slots->getSlot(m_currentNum);
+    }
+
+    return *this;
+  }
   friend bool operator==(const iterator &a, const iterator &b)
   {
     if (a.m_isEnd && b.m_isEnd)
@@ -209,12 +299,12 @@ union CellPayload
 };
 
 /* Generic size+payload cell for any node. Every cell in a leaf node is just this */
-struct NodeCell
+template <typename T> struct NodeCell
 {
   u32 payloadSize;
   CellPayload payload;
 
-  template <typename T> explicit NodeCell(T data)
+  explicit NodeCell(T data)
   {
     payloadSize = sizeof(T);
     // TODO: overflow
@@ -222,7 +312,8 @@ struct NodeCell
     std::memcpy(payload.small.data(), &data, payloadSize);
   }
 
-  NodeCell(const SlotHeader &sh, const Slot &s)
+  template<std::size_t BS>
+  NodeCell(const SlotHeader<BS> &sh, const Slot &s)
   {
     // read the structure of the cell from the slot
     const std::byte *pCell = sh.readCell(s.cellOffset);
@@ -233,7 +324,7 @@ struct NodeCell
     // if we want to read the entire payload, this is where we could follow `payload.overflow`
   }
 
-  template <typename T> T getPayload() const noexcept
+  T getPayload() const noexcept
   {
     // TODO: overflow
     return *reinterpret_cast<const T *>(payload.small.data());
@@ -258,12 +349,12 @@ static_assert(sizeof(CellPayload::large) == MAX_CELL_PAYLOAD,
 
 /* The cells used in interior nodes. They store the a pointer to their left child in the btree along
  * with the payload data itself for the key */
-struct InteriorCell
+template <typename T> struct InteriorCell
 {
   PageId leftChild = 0;
-  NodeCell cell;
+  NodeCell<T> cell;
 
-  template <typename T> explicit InteriorCell(T data) : cell(data) {}
+  explicit InteriorCell(T data) : cell(data) {}
 
   bool isEnd() const noexcept { return cell.payloadSize == 0; }
 
@@ -280,25 +371,54 @@ struct BTreeHeader
 {
   CommonHeader common;
   PageId parent = 0;
-  SlotHeader slots;
-
-  BTreeHeader(std::array<std::byte, PAGE_SIZE> &array)
-      : slots(std::span<std::byte>(array.data() + sizeof(BTreeHeader),
-                                   array.size() - sizeof(BTreeHeader)))
-  {
-  }
+  SlotHeader<PAGE_SIZE - sizeof(common) - sizeof(parent) - sizeof(SlotHeader<0>)> slots;
 
   bool isRoot() const noexcept { return parent == 0; }
   bool isLeaf() const noexcept { return common.type == PageType::Leaf; }
+
+  Page<BTreeHeader> &split(Pager &pager)
+  {
+    // these are 1-indexed
+    const int K = slots.entryCount();
+    const int thisNewCount = (K + 1) / 2;
+    const int newNodeCount = K - thisNewCount;
+
+    Page<BTreeHeader> &newPage = pager.nextFree<BTreeHeader>();
+    newPage.header()->parent = this->parent;
+    newPage.header()->common.type = this->common.type;
+
+    for (auto it = slots.begin() + thisNewCount; it != slots.end(); ++it)
+    {
+      const Slot &s1 = *it;
+      const std::byte *c1 = slots.readCell(s1.cellOffset);
+      const InteriorCell ic = *reinterpret_cast<const InteriorCell<u32> *>(c1);
+      SlotNum s2Num = 0;
+
+      std::byte *c2 = reinterpret_cast<std::byte *>(
+          newPage.header()->slots.createNextSlotWithCell(s1.cellSize, &s2Num));
+      const Slot *s2 = newPage.header()->slots.getSlot(s2Num);
+      std::memcpy(c2, c1, s1.cellSize);
+    }
+
+    // TODO: merge these loops by iterating through the slots backward
+    // from the end, remove all of the nodes that were copied
+    for (int i = K - 1; i >= thisNewCount; --i)
+    {
+      slots.deleteSlot(i);
+    }
+
+    return newPage;
+  }
 };
 static_assert(offsetof(BTreeHeader, common) == 0, "Common header must be at offset 0");
+static_assert(offsetof(BTreeHeader, slots) == (sizeof(BTreeHeader) - sizeof(BTreeHeader::slots)), "SlotHeader must be the last member");
 /* we determine the btree order from the max cell size. this will need to be determined presumably
  * through benchmarking. Since the payload of the cells is not known, here we are allowing a 32 byte
  * payload. MAX_CELL_SIZE is the maximum total cell size (i.e. payload size + the payload itself)
  * within the slotted page's cell. A cell larger than this size is then extended into the overflow
  * page */
 static constexpr std::size_t MAX_CELL_SIZE =
-    std::max(sizeof(NodeCell), sizeof(InteriorCell)) + MAX_CELL_PAYLOAD;
+    std::max(sizeof(NodeCell<std::any>), sizeof(InteriorCell<std::any>)) + MAX_CELL_PAYLOAD;
 static constexpr std::size_t BTREE_ORDER =
     (PAGE_SIZE - sizeof(BTreeHeader)) / (MAX_CELL_SIZE + sizeof(Slot));
 static_assert(BTREE_ORDER > 0, "BTree order must be at least 1");
@@ -321,10 +441,10 @@ struct InteriorNode
       for (const Slot &s : currentPage.header()->slots)
       {
         // get the interior cell for this slot
-        assert(s.cellSize == sizeof(InteriorCell) &&
+        assert(s.cellSize == sizeof(InteriorCell<V>) &&
                "Interior search cell should be size of Interior");
         const InteriorCell interior =
-            *reinterpret_cast<InteriorCell *>(currentPage.header()->slots.getCell(s.cellOffset));
+            *reinterpret_cast<InteriorCell<V> *>(currentPage.header()->slots.getCell(s.cellOffset));
         assert(interior.leftChild != 0 &&
                "Non leaf node cannot have leaf cell. Tree must be unbalanced");
         if (interior.isEnd())
@@ -338,7 +458,7 @@ struct InteriorNode
         assert(interior.cell.payloadSize == sizeof(V) &&
                "Interior cell payload should be size of search type");
         // get the payload for the cell - the search value in this node
-        const V value = *reinterpret_cast<const V *>(interior.cell.payload.small.data());
+        const V &value = interior.cell.getPayload();
         if (Q < value)
         {
           // follow the slot to the next node
@@ -349,6 +469,18 @@ struct InteriorNode
     }
 
     return currentPage;
+  }
+
+  template <typename T> void insert(Pager &pager, const T &V)
+  {
+    Page<BTreeHeader> &leaf = searchGetLeaf(pager, V);
+    if (leaf.header()->slots.entryCount() < BTREE_ORDER)
+    {
+      leaf.header()->slots.insertCell(LeafCell(V));
+      return;
+    }
+
+    auto newNode = leaf.header()->split(pager);
   }
 };
 
@@ -383,7 +515,24 @@ struct LeafNode
   }
 
   /* find the slot for Q and return the slot and cell */
-  std::optional<std::pair<Slot*,LeafCell*>> searchGetSlot(const LeafCell &Q);
+  template <typename T>
+  std::optional<std::pair<Slot *, LeafCell<T> *>> searchGetSlot(const LeafCell<T> &Q)
+  {
+    // TODO: binary search?
+    for (Slot &s : page.header()->slots)
+    {
+      // TODO: overflow
+      LeafCell<T> *c = reinterpret_cast<LeafCell<T> *>(page.header()->slots.getCell(s.cellOffset));
+      // TODO: ordering
+      if (Q.payload.small == c->payload.small)
+      {
+        // TODO: overflow
+        return std::pair(&s, c);
+      }
+    }
+
+    return std::nullopt;
+  }
 
 private:
   inline Reserved *reserved()
@@ -392,12 +541,13 @@ private:
   }
 };
 
-template <typename P> Slot *SlotHeader::insertCell(const InteriorCell &cell, u16 *retSlotNumber)
+template <std::size_t BS>
+template <typename P> Slot *SlotHeader<BS>::insertCell(const InteriorCell<P> &cell, u16 *retSlotNumber)
 {
   // TODO: can we use the operator< for InteriorCell instead?
   // since they both have to be the same payload type
   const auto interiorComp = std::function(
-      [](const InteriorCell &a, const InteriorCell &b)
+      [](const InteriorCell<P> &a, const InteriorCell<P> &b)
       {
         // end slots always go at the end
         // a < b == true
@@ -409,18 +559,19 @@ template <typename P> Slot *SlotHeader::insertCell(const InteriorCell &cell, u16
         {
           return true;
         }
-        return a.cell.getPayload<P>() < b.cell.getPayload<P>();
+        return a.cell.getPayload() < b.cell.getPayload();
       });
 
   return insertCell(cell, interiorComp, retSlotNumber);
 }
 
-template <typename P> Slot *SlotHeader::insertCell(const LeafCell &cell, u16 *retSlotNumber)
+template <std::size_t BS>
+template <typename P> Slot *SlotHeader<BS>::insertCell(const LeafCell<P> &cell, u16 *retSlotNumber)
 {
   // TODO: can we use the operator< for LeafCell instead?
   // since they both have to be the same payload type
-  const auto leafComp = std::function([](const LeafCell &a, const LeafCell &b)
-                                      { return a.getPayload<P>() < b.getPayload<P>(); });
+  const auto leafComp = std::function([](const LeafCell<P> &a, const LeafCell<P> &b)
+                                      { return a.getPayload() < b.getPayload(); });
 
   return insertCell(cell, leafComp, retSlotNumber);
 }

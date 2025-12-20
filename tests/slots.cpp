@@ -6,16 +6,18 @@
 TEST(SlotsIterator, ValuesSorted)
 {
   std::array<std::byte, 512> buf = {static_cast<std::byte>(0)};
-  SlotHeader sh = SlotHeader(std::span(buf.data(), buf.size()));
-  sh.insertCell<u32>(LeafCell(static_cast<u32>(3)));
-  sh.insertCell<u32>(LeafCell(static_cast<u32>(2)));
-  sh.insertCell<u32>(LeafCell(static_cast<u32>(1)));
+  constexpr std::size_t bufsize = buf.size() - sizeof(SlotHeader<0>);
+  SlotHeader<bufsize> &sh = *reinterpret_cast<SlotHeader<bufsize> *>(buf.data());
+  sh = SlotHeader<bufsize>();
+  sh.insertCell(LeafCell(static_cast<u32>(3)));
+  sh.insertCell(LeafCell(static_cast<u32>(2)));
+  sh.insertCell(LeafCell(static_cast<u32>(1)));
 
   int expected = 1;
   for (const Slot &s : sh)
   {
-    LeafCell c = *reinterpret_cast<const LeafCell *>(sh.readCell(s.cellOffset));
-    u32 v = *reinterpret_cast<u32 *>(c.payload.small.data());
+    LeafCell<u32> c = *reinterpret_cast<const LeafCell<u32> *>(sh.readCell(s.cellOffset));
+    u32 v = c.getPayload();
     EXPECT_EQ(expected, v);
     ++expected;
   }
@@ -26,17 +28,19 @@ TEST(SlotsIterator, ValuesSorted)
 TEST(SlotsIterator, IterateEndSlot)
 {
   std::array<std::byte, 512> buf = {static_cast<std::byte>(0)};
-  SlotHeader sh = SlotHeader(std::span(buf.data(), buf.size()));
-  sh.insertCell<u32>(InteriorCell::End());
-  sh.insertCell<u32>(InteriorCell(static_cast<u32>(1)));
-  sh.insertCell<u32>(InteriorCell(static_cast<u32>(2)));
-  sh.insertCell<u32>(InteriorCell(static_cast<u32>(3)));
+  constexpr std::size_t bufsize = buf.size() - sizeof(SlotHeader<0>);
+  SlotHeader<bufsize> &sh = *reinterpret_cast<SlotHeader<bufsize> *>(buf.data());
+  sh = SlotHeader<bufsize>();
+  sh.insertCell(InteriorCell<u32>::End());
+  sh.insertCell(InteriorCell(static_cast<u32>(1)));
+  sh.insertCell(InteriorCell(static_cast<u32>(2)));
+  sh.insertCell(InteriorCell(static_cast<u32>(3)));
 
   int expected = 1;
   for (const Slot &s : sh)
   {
-    InteriorCell c = *reinterpret_cast<const InteriorCell *>(sh.readCell(s.cellOffset));
-    u32 v = *reinterpret_cast<u32 *>(c.cell.payload.small.data());
+    InteriorCell c = *reinterpret_cast<const InteriorCell<u32> *>(sh.readCell(s.cellOffset));
+    u32 v = c.cell.getPayload();
 
     if (c.isEnd())
     {
@@ -57,9 +61,11 @@ TEST(SlotsIterator, IterateEndSlot)
 TEST(SlotsIterator, ReferenceAddress)
 {
   std::array<std::byte, 512> buf = {static_cast<std::byte>(0)};
-  SlotHeader sh = SlotHeader(std::span(buf.data(), buf.size()));
+  constexpr std::size_t bufsize = buf.size() - sizeof(SlotHeader<0>);
+  SlotHeader<bufsize> &sh = *reinterpret_cast<SlotHeader<bufsize> *>(buf.data());
+  sh = SlotHeader<bufsize>();
 
-  const Slot *slot = sh.insertCell<u32>(LeafCell(static_cast<u32>(3)));
+  const Slot *slot = sh.insertCell(LeafCell(static_cast<u32>(3)));
 
   int i = 0;
   for (const Slot &s : sh)
