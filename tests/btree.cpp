@@ -12,10 +12,11 @@ TEST(Slots, AddSlotsAndCellsUpdatesFreePointers)
   sh = SlotHeader<bufsize>();
 
   // the slot header lives inside the page, so create a span to exclude the header
-  std::span<std::byte> buf = std::span<std::byte>(page.data()+sizeof(sh), page.size()-sizeof(sh));
+  std::span<std::byte> buf =
+      std::span<std::byte>(page.data() + sizeof(sh), page.size() - sizeof(sh));
 
   NodeCell cell(static_cast<u32>(123));
-  
+
   {
     u16 slotNumber;
     Slot *slot = sh.createNextSlot(cell.cellSize(), &slotNumber);
@@ -33,9 +34,9 @@ TEST(Slots, AddSlotsAndCellsUpdatesFreePointers)
     Slot *slot2 = sh.createNextSlot(cell.cellSize(), &slotNumber2);
     slot2->cellOffset = sh.allocNextCell(cell.cellSize());
     EXPECT_EQ(1, slotNumber2);
-    EXPECT_EQ(buf.size() - 2*cell.cellSize(), slot2->cellOffset);
-    EXPECT_EQ(buf.size() - 2*sizeof(Slot) - 2*cell.cellSize(), sh.freeLength);
-    EXPECT_EQ(2*sizeof(Slot), sh.freeStart);
+    EXPECT_EQ(buf.size() - 2 * cell.cellSize(), slot2->cellOffset);
+    EXPECT_EQ(buf.size() - 2 * sizeof(Slot) - 2 * cell.cellSize(), sh.freeLength);
+    EXPECT_EQ(2 * sizeof(Slot), sh.freeStart);
   }
 }
 
@@ -49,7 +50,8 @@ TEST(Slots, AddThenRead)
   sh = SlotHeader<bufsize>();
 
   // the slot header lives inside the page, so create a span to exclude the header
-  std::span<std::byte> buf = std::span<std::byte>(page.data()+sizeof(sh), page.size()-sizeof(sh));
+  std::span<std::byte> buf =
+      std::span<std::byte>(page.data() + sizeof(sh), page.size() - sizeof(sh));
 
   NodeCell cell(static_cast<u32>(123));
   ASSERT_EQ(sizeof(u32) + sizeof(u32), cell.cellSize());
@@ -59,14 +61,16 @@ TEST(Slots, AddThenRead)
   Slot *slot = sh.createNextSlot(cell.cellSize(), &slotNumber);
   slot->cellOffset = sh.allocNextCell(cell.cellSize());
   // set the contents of the cell
-  NodeCell<u32> *pCell = reinterpret_cast<NodeCell<u32>*>(sh.getCell(slot->cellOffset)); 
+  NodeCell<u32> *pCell = reinterpret_cast<NodeCell<u32> *>(sh.getCell(slot->cellOffset));
   std::memcpy(pCell, &cell, cell.cellSize());
 
   // read the slot and cell back using the slot number
   Slot readSlot;
-  NodeCell<u32> readCell = *reinterpret_cast<NodeCell<u32>*>(sh.getSlotAndCell(slotNumber, &readSlot));
+  NodeCell<u32> readCell =
+      *reinterpret_cast<NodeCell<u32> *>(sh.getSlotAndCell(slotNumber, &readSlot));
 
-  EXPECT_EQ(reinterpret_cast<intptr_t>(pCell), reinterpret_cast<intptr_t>(buf.data() + slot->cellOffset));
+  EXPECT_EQ(reinterpret_cast<intptr_t>(pCell),
+            reinterpret_cast<intptr_t>(buf.data() + slot->cellOffset));
   EXPECT_EQ(cell.payloadSize, readCell.payloadSize);
   EXPECT_EQ(cell.getPayload(), readCell.getPayload());
 }
@@ -79,17 +83,13 @@ TEST(Slots, OutOfBounds)
   sh = SlotHeader<bufsize>();
 
   // allow getting the slot on the boundary of freeStart as that's how we get new cells
-  ASSERT_NO_THROW({
-      sh.getSlot(0);
-  });
+  ASSERT_NO_THROW({ sh.getSlot(0); });
 
-  ASSERT_THROW({
-      sh.getSlot(1);
-  }, std::out_of_range);
+  ASSERT_THROW({ sh.getSlot(1); }, std::out_of_range);
 }
 
-/* test that cells and slots are inserted correctly into the slotted page and that the data is read back correctly.
- * we also test that the sorting places the slots into the correct place */
+/* test that cells and slots are inserted correctly into the slotted page and that the data is read
+ * back correctly. we also test that the sorting places the slots into the correct place */
 TEST(Slots, Insertion)
 {
   std::array<std::byte, 128> buf = {static_cast<std::byte>(0)};
@@ -97,14 +97,15 @@ TEST(Slots, Insertion)
   SlotHeader<bufsize> &sh = *reinterpret_cast<SlotHeader<bufsize> *>(buf.data());
   sh = SlotHeader<bufsize>();
 
-  struct Cell {
+  struct Cell
+  {
     u16 totalSize;
     std::array<char, 10> data = {0};
   };
   // sort the slots keys lexicographically
-  auto comparitor = std::function([](const Cell &a, const Cell &b){
-        return std::strncmp(a.data.data(), b.data.data(), a.data.size()) < 0;
-  });
+  auto comparitor =
+      std::function([](const Cell &a, const Cell &b)
+                    { return std::strncmp(a.data.data(), b.data.data(), a.data.size()) < 0; });
   Cell c = Cell();
   std::strcpy(c.data.data(), "key1");
   c.totalSize = c.data.size();
@@ -141,16 +142,16 @@ TEST(Slots, InsertAfterDelete)
   constexpr std::size_t bufsize = buf.size() - sizeof(SlotHeader<0>);
   SlotHeader<bufsize> &sh = *reinterpret_cast<SlotHeader<bufsize> *>(buf.data());
   sh = SlotHeader<bufsize>();
-  
-  struct Cell {
+
+  struct Cell
+  {
     u16 totalSize;
     std::array<char, 10> data = {0};
   };
   // sort the keys lexicographically
-  auto comparitor = std::function([](const Cell &a, const Cell &b){
-        return std::strncmp(a.data.data(), b.data.data(), a.data.size()) < 0;
-  });
-
+  auto comparitor =
+      std::function([](const Cell &a, const Cell &b)
+                    { return std::strncmp(a.data.data(), b.data.data(), a.data.size()) < 0; });
 
   Cell c;
   std::strcpy(c.data.data(), "key1");
@@ -185,7 +186,8 @@ TEST(Slots, InsertAfterDelete)
   EXPECT_EQ(freeLength - sizeof(Cell), sh.freeLength);
 }
 
-TEST(BTree, PageTypes) {
+TEST(BTree, PageTypes)
+{
   Page<BTreeHeader> root(PageType::Root);
   EXPECT_EQ(PageType::Root, root.header()->common.type);
 }
@@ -197,7 +199,7 @@ TEST(BTree, SearchGetLeaf)
    *   /   \
    * [2]-->[3,4]
    * Search for 3
-  */
+   */
   InteriorNode root;
   InteriorCell top = InteriorCell(static_cast<u32>(3));
   const PageId rootId = 1;
@@ -225,7 +227,8 @@ TEST(BTree, SearchGetLeaf)
   pager.setPage(leftId, left.page.as_ref<CommonHeader>());
   pager.setPage(rightId, right.page.as_ref<CommonHeader>());
 
-  // search for 4, should return the `right` leaf node. It will not point directly to 4, or confirm that 4 exists
+  // search for 4, should return the `right` leaf node. It will not point directly to 4, or confirm
+  // that 4 exists
   Page<BTreeHeader> &res = root.searchGetLeaf(pager, static_cast<u32>(4));
   ASSERT_TRUE(res.header()->isLeaf());
   EXPECT_EQ(rootId, res.header()->parent);
@@ -280,13 +283,15 @@ TEST(BTree, SplitNode)
     auto it1 = n1.page.header()->slots.begin();
     {
       Slot &s = *it1;
-      InteriorCell ic = *reinterpret_cast<const InteriorCell<u32>*>(n1.page.header()->slots.readCell(s.cellOffset));
+      InteriorCell ic = *reinterpret_cast<const InteriorCell<u32> *>(
+          n1.page.header()->slots.readCell(s.cellOffset));
       EXPECT_EQ(1, ic.cell.getPayload());
     }
     ++it1;
     {
       Slot &s = *it1;
-      InteriorCell ic = *reinterpret_cast<const InteriorCell<u32>*>(n1.page.header()->slots.readCell(s.cellOffset));
+      InteriorCell ic = *reinterpret_cast<const InteriorCell<u32> *>(
+          n1.page.header()->slots.readCell(s.cellOffset));
       EXPECT_EQ(2, ic.cell.getPayload());
     }
     ++it1;
@@ -299,13 +304,15 @@ TEST(BTree, SplitNode)
     auto it2 = n2.header()->slots.begin();
     {
       Slot &s = *it2;
-      const InteriorCell<u32> *ic = reinterpret_cast<const InteriorCell<u32>*>(n2.header()->slots.readCell(s.cellOffset));
+      const InteriorCell<u32> *ic =
+          reinterpret_cast<const InteriorCell<u32> *>(n2.header()->slots.readCell(s.cellOffset));
       EXPECT_EQ(3, ic->cell.getPayload());
     }
     ++it2;
     {
       Slot &s = *it2;
-      InteriorCell ic = *reinterpret_cast<const InteriorCell<u32>*>(n2.header()->slots.readCell(s.cellOffset));
+      InteriorCell ic =
+          *reinterpret_cast<const InteriorCell<u32> *>(n2.header()->slots.readCell(s.cellOffset));
       EXPECT_EQ(4, ic.cell.getPayload());
     }
     ++it2;
