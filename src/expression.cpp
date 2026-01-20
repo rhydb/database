@@ -35,6 +35,7 @@ std::ostream &operator<<(std::ostream &os, const Expr::Type &type)
     case Expr::Type::String:
       return os << "String";
     case Expr::Type::Unknown:
+  default:
       return os << "Unkown";
   }
 }
