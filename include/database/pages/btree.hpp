@@ -5,7 +5,6 @@
 
 #include <any>
 #include <algorithm>
-#include <cstring>
 #include <cassert>
 #include <span>
 #include <functional>

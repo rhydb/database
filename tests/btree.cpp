@@ -328,3 +328,41 @@ TEST(BTree, InsertIntoRoot)
   // pager.setPage(1, root.page.as_ref<CommonHeader>());
   // root.insert(pager, static_cast<u32>(123));
 }
+
+/* test that adding the maximum size cell fills up the btree node */
+TEST(BTree, NodeCanFit_BTREE_ORDER_Cells)
+{
+  Page <BTreeHeader> node;
+
+  struct MaxCell
+  {
+    std::size_t i;
+    std::array<std::byte, MAX_CELL_SIZE - sizeof(i)> data;
+    MaxCell(std::size_t i) : i(i)
+    {
+      data.fill(static_cast<std::byte>(0));
+    }
+  };
+  static_assert(sizeof(MaxCell) == MAX_CELL_SIZE, "sizeof(MaxCell) struct should be the maximum cell size");
+
+  auto comparitor =
+    std::function([](const MaxCell &a, const MaxCell &b)
+    { return a.i < b.i; });
+  for (std::size_t i{0}; i < BTREE_ORDER; ++i)
+  {
+    node.header()->slots.insertCell(MaxCell(i), comparitor);
+  }
+  EXPECT_EQ(BTREE_ORDER, node.header()->slots.entryCount());
+
+  std::size_t numSlots{0};
+  for (const auto &slot : node.header()->slots)
+  {
+    auto cell =
+      reinterpret_cast<MaxCell *>(node.header()->slots.getCell(slot.cellOffset));
+    EXPECT_EQ(numSlots, cell->i);
+    ++numSlots;
+  }
+  EXPECT_EQ(BTREE_ORDER, numSlots);
+  // there should not be enough space to fit another cell+slot
+  EXPECT_GT(MAX_CELL_SIZE + sizeof(Slot), node.header()->slots.freeLength);
+}
