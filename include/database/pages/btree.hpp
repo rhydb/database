@@ -46,7 +46,7 @@ template <std::size_t bufsize> struct SlotHeader
 
   bool isEmpty() const noexcept { return freeStart == 0; }
   bool isFree() const noexcept { return freeStart == 0 && freeLength == 0; }
-  int entryCount() const noexcept { return freeStart / sizeof(Slot); }
+  u16 entryCount() const noexcept { return freeStart / sizeof(Slot); }
 
   bool isSlotOutOfBounds(SlotNum slotNumber) { return slotNumber * sizeof(Slot) > freeStart; }
   Slot *getSlot(SlotNum slotNumber)
@@ -80,7 +80,7 @@ template <std::size_t bufsize> struct SlotHeader
     deleteSlot(&s);
   }
 
-  // add data to a new cel and create its slot in the sorted position
+  // add data to a new cell and create its slot in the sorted position
   // this creates a new cell in the page and assigns a slot to it.
   // the slot will be in its sorted position and may reuse a free slot if one is present
   // returns the slot the cell was inserted into
@@ -376,33 +376,38 @@ struct BTreeHeader
   bool isRoot() const noexcept { return parent == 0; }
   bool isLeaf() const noexcept { return common.type == PageType::Leaf; }
 
+  /* split the node in half (ceil). see full implementation for details */
   Page<BTreeHeader> &split(Pager &pager)
   {
+    const auto K = slots.entryCount();
+    const decltype(K) half = ((K / 2) + (K & 1)); // overflow-safe ceil, or does K get promoted here anyways?
+    return split(pager, half);
+  }
+
+  /* split the node in half, starting from `start`, copying slots to new cell and deleting from original */
+  Page<BTreeHeader> &split(Pager &pager, const u16 start)
+  {
     // these are 1-indexed
-    const int K = slots.entryCount();
-    const int thisNewCount = (K + 1) / 2;
-    const int newNodeCount = K - thisNewCount;
+    const auto K = slots.entryCount();
 
     Page<BTreeHeader> &newPage = pager.nextFree<BTreeHeader>();
     newPage.header()->parent = this->parent;
     newPage.header()->common.type = this->common.type;
 
-    for (auto it = slots.begin() + thisNewCount; it != slots.end(); ++it)
+    for (auto it = slots.begin() + start; it != slots.end(); ++it)
     {
       const Slot &s1 = *it;
       const std::byte *c1 = slots.readCell(s1.cellOffset);
-      const InteriorCell ic = *reinterpret_cast<const InteriorCell<u32> *>(c1);
       SlotNum s2Num = 0;
 
       std::byte *c2 = reinterpret_cast<std::byte *>(
           newPage.header()->slots.createNextSlotWithCell(s1.cellSize, &s2Num));
-      const Slot *s2 = newPage.header()->slots.getSlot(s2Num);
       std::memcpy(c2, c1, s1.cellSize);
     }
 
     // TODO: merge these loops by iterating through the slots backward
     // from the end, remove all of the nodes that were copied
-    for (int i = K - 1; i >= thisNewCount; --i)
+    for (SlotNum i = K - 1; i >= start; --i)
     {
       slots.deleteSlot(i);
     }
@@ -474,6 +479,7 @@ struct InteriorNode
   template <typename T> void insert(Pager &pager, const T &V)
   {
     Page<BTreeHeader> &leaf = searchGetLeaf(pager, V);
+    // BTREE_ORDER is the maximum number of entries in the node, including the end cell
     if (leaf.header()->slots.entryCount() < BTREE_ORDER)
     {
       leaf.header()->slots.insertCell(LeafCell(V));
@@ -481,6 +487,9 @@ struct InteriorNode
     }
 
     auto newNode = leaf.header()->split(pager);
+    assert(newNode.header()->slots.entryCount() < BTREE_ORDER && "Newly split node should have empty slots");
+
+    newNode.header()->slots.insertCell(LeafCell(V));
   }
 };
 
