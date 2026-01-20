@@ -18,7 +18,7 @@ template <typename Header = CommonHeader> struct Page
 
   explicit Page(PageType type)
   {
-    std::memset(buf.data(), 0, buf.size());
+    buf.fill(static_cast<std::byte>(0));
 
     // TODO: endianness
 

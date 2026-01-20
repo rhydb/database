@@ -307,7 +307,7 @@ template <typename T> struct NodeCell
   {
     payloadSize = sizeof(T);
     // TODO: overflow
-    std::memset(payload.small.data(), 0, payload.small.size());
+    payload.small.fill(static_cast<std::byte>(0));
     std::memcpy(payload.small.data(), &data, payloadSize);
   }
 
