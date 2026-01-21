@@ -40,8 +40,8 @@ template <std::size_t bufsize> struct SlotHeader
   iterator begin() { return iterator(this); }
   iterator end() { return iterator(); }
 
-  u16 freeStart = 0; // offset from end of header
-  u16 freeLength = bufsize;    // marked as free if both 0
+  u16 freeStart = 0;        // offset from end of header
+  u16 freeLength = bufsize; // marked as free if both 0
 
   bool isEmpty() const noexcept { return freeStart == 0; }
   bool isFree() const noexcept { return freeStart == 0 && freeLength == 0; }
@@ -160,7 +160,7 @@ template <std::size_t bufsize> struct SlotHeader
 
   /* like createNextSlot, but also allocates its cell, and sets the slot's cell offset.
    * returns the newly created cell and optionally the slot number */
-  void *createNextSlotWithCell(u16 cellSize, SlotNum *retSlotNumber)
+  [[nodiscard]] void *createNextSlotWithCell(u16 cellSize, SlotNum *retSlotNumber)
   {
     assert(freeLength >= cellSize + sizeof(Slot) && "Not enough room in page for new cell&slot");
     Slot *s = createNextSlot(cellSize, retSlotNumber);
@@ -168,10 +168,9 @@ template <std::size_t bufsize> struct SlotHeader
     return getCell(s->cellOffset);
   }
 
-
 private:
-  // TODO: how can we avoid storing this in the struct, so that sizeof returns just the header?
-  // this is important as it affects the other headers
+  // TODO: LeafNodes store their reserved data at the end of the buffer, so the bufsize here is
+  // incorrect for them. The memory is valid, but points into the reserved data.
 
   std::span<std::byte> buf() noexcept
   {
@@ -187,9 +186,12 @@ private:
   {
     // how many slots between the header end and s
     assert(reinterpret_cast<intptr_t>(s) >= reinterpret_cast<intptr_t>(buf().data()) &&
-           reinterpret_cast<intptr_t>(s) <= reinterpret_cast<intptr_t>(buf().data() + buf().size()) &&
+           reinterpret_cast<intptr_t>(s) <=
+               reinterpret_cast<intptr_t>(buf().data() + buf().size()) &&
            "Slot pointer out of bounds to retrieve slot number");
-    return (reinterpret_cast<intptr_t>(s) - reinterpret_cast<intptr_t>(buf().data())) / sizeof(Slot);
+
+    return (reinterpret_cast<intptr_t>(s) - reinterpret_cast<intptr_t>(buf().data())) /
+           sizeof(Slot);
   }
 
   Slot *insertSlot(SlotNum slotNum)
@@ -225,8 +227,8 @@ template <std::size_t BS> struct SlotHeader<BS>::iterator
   using pointer = Slot *;
   using reference = Slot &;
 
-  explicit iterator(SlotHeader *slots) noexcept
-  : m_slots(slots) {
+  explicit iterator(SlotHeader *slots) noexcept : m_slots(slots)
+  {
     if (slots == nullptr || slots->isEmpty() || slots->isSlotOutOfBounds(0))
     {
       m_isEnd = true;
@@ -303,7 +305,7 @@ template <typename T> struct NodeCell
   u32 payloadSize;
   CellPayload payload;
 
-  explicit NodeCell(T data)
+  explicit NodeCell(const T &data)
   {
     payloadSize = sizeof(T);
     // TODO: overflow
@@ -311,8 +313,7 @@ template <typename T> struct NodeCell
     std::memcpy(payload.small.data(), &data, payloadSize);
   }
 
-  template<std::size_t BS>
-  NodeCell(const SlotHeader<BS> &sh, const Slot &s)
+  template <std::size_t BS> NodeCell(const SlotHeader<BS> &sh, const Slot &s)
   {
     // read the structure of the cell from the slot
     const std::byte *pCell = sh.readCell(s.cellOffset);
@@ -504,8 +505,7 @@ struct LeafNode
   LeafNode() : page(PageType::Leaf)
   {
     BTreeHeader *header = page.header();
-    header->slots.freeStart = 0;
-    header->slots.freeLength = PAGE_SIZE - header->slots.freeStart - sizeof(Reserved);
+    header->slots.freeLength -= sizeof(Reserved);
 
     setSibling(0);
   }
@@ -550,7 +550,8 @@ private:
 };
 
 template <std::size_t BS>
-template <typename P> Slot *SlotHeader<BS>::insertCell(const InteriorCell<P> &cell, u16 *retSlotNumber)
+template <typename P>
+Slot *SlotHeader<BS>::insertCell(const InteriorCell<P> &cell, u16 *retSlotNumber)
 {
   // TODO: can we use the operator< for InteriorCell instead?
   // since they both have to be the same payload type
@@ -574,7 +575,8 @@ template <typename P> Slot *SlotHeader<BS>::insertCell(const InteriorCell<P> &ce
 }
 
 template <std::size_t BS>
-template <typename P> Slot *SlotHeader<BS>::insertCell(const LeafCell<P> &cell, u16 *retSlotNumber)
+template <typename P>
+Slot *SlotHeader<BS>::insertCell(const LeafCell<P> &cell, u16 *retSlotNumber)
 {
   // TODO: can we use the operator< for LeafCell instead?
   // since they both have to be the same payload type
@@ -582,4 +584,46 @@ template <typename P> Slot *SlotHeader<BS>::insertCell(const LeafCell<P> &cell, 
                                       { return a.getPayload() < b.getPayload(); });
 
   return insertCell(cell, leafComp, retSlotNumber);
+}
+
+template <typename T> void printTree(Pager &pager, Page<BTreeHeader> &root, u32 depth = 0)
+{
+  switch (root.header()->common.type)
+  {
+  case PageType::Interior:
+    std::cout << '(';
+    for (const auto &slot : root.header()->slots)
+    {
+      auto cell =
+          reinterpret_cast<InteriorCell<T> *>(root.header()->slots.getCell(slot.cellOffset));
+      if (cell->isEnd())
+      {
+        std::cout << "END" << ' ';
+      }
+      else
+      {
+        std::cout << cell->cell.getPayload() << ' ';
+      }
+      Page<BTreeHeader> &child = pager.getPage<BTreeHeader>(cell->leftChild);
+      printTree<T>(pager, child, depth + 1);
+    }
+    std::cout << ')';
+    break;
+  case PageType::Leaf:
+    std::cout << '[';
+    for (const auto &slot : root.header()->slots)
+    {
+      auto cell = reinterpret_cast<LeafCell<T> *>(root.header()->slots.getCell(slot.cellOffset));
+      std::cout << cell->getPayload() << ' ';
+    }
+    std::cout << ']' << ' ';
+    break;
+  default:
+    std::cout << '?' << root.header()->common.type << '?';
+  }
+
+  if (depth == 0)
+  {
+    std::cout << std::endl;
+  }
 }

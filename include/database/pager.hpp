@@ -143,12 +143,16 @@ public:
 
   [[nodiscard]] PageId nextFree();
   template <typename H>
-  Page<H> &nextFree()
+  Page<H> &nextFree(PageId *retPageId = nullptr)
   {
     PageId id = nextFree();
     Page<H> &newPage = getPage<H>(id);
     newPage = Page<H>();
     flushPage(id, newPage); // write the updated page header
+    if (retPageId != nullptr)
+    {
+      *retPageId = id;
+    }
     return newPage;
   }
   void freePage(PageId pageNum);
