@@ -376,47 +376,13 @@ struct BTreeHeader
   bool isRoot() const noexcept { return parent == 0; }
   bool isLeaf() const noexcept { return common.type == PageType::Leaf; }
 
-  /* split the node in half (ceil). see full implementation for details */
-  Page<BTreeHeader> &split(Pager &pager)
-  {
-    const auto K = slots.entryCount();
-    const decltype(K) half = ((K / 2) + (K & 1)); // overflow-safe ceil, or does K get promoted here anyways?
-    return split(pager, half);
-  }
-
-  /* split the node in half, starting from `start`, copying slots to new cell and deleting from original */
-  Page<BTreeHeader> &split(Pager &pager, const u16 start)
-  {
-    // these are 1-indexed
-    const auto K = slots.entryCount();
-
-    Page<BTreeHeader> &newPage = pager.nextFree<BTreeHeader>();
-    newPage.header()->parent = this->parent;
-    newPage.header()->common.type = this->common.type;
-
-    for (auto it = slots.begin() + start; it != slots.end(); ++it)
-    {
-      const Slot &s1 = *it;
-      const std::byte *c1 = slots.readCell(s1.cellOffset);
-      SlotNum s2Num = 0;
-
-      std::byte *c2 = reinterpret_cast<std::byte *>(
-          newPage.header()->slots.createNextSlotWithCell(s1.cellSize, &s2Num));
-      std::memcpy(c2, c1, s1.cellSize);
-    }
-
-    // TODO: merge these loops by iterating through the slots backward
-    // from the end, remove all of the nodes that were copied
-    for (SlotNum i = K - 1; i >= start; --i)
-    {
-      slots.deleteSlot(i);
-    }
-
-    return newPage;
-  }
+  /* split the node in half, starting from `start`, copying slots to new cell and deleting from
+   * original */
+  Page<BTreeHeader> &split(Pager &pager, PageId *retPageId = nullptr);
 };
 static_assert(offsetof(BTreeHeader, common) == 0, "Common header must be at offset 0");
-static_assert(offsetof(BTreeHeader, slots) == (sizeof(BTreeHeader) - sizeof(BTreeHeader::slots)), "SlotHeader must be the last member");
+static_assert(offsetof(BTreeHeader, slots) == (sizeof(BTreeHeader) - sizeof(BTreeHeader::slots)),
+              "SlotHeader must be the last member");
 /* we determine the btree order from the max cell size. this will need to be determined presumably
  * through benchmarking. Since the payload of the cells is not known, here we are allowing a 32 byte
  * payload. MAX_CELL_SIZE is the maximum total cell size (i.e. payload size + the payload itself)
@@ -480,16 +446,39 @@ struct InteriorNode
   {
     Page<BTreeHeader> &leaf = searchGetLeaf(pager, V);
     // BTREE_ORDER is the maximum number of entries in the node, including the end cell
+    // leaf nodes do not have an end cell
     if (leaf.header()->slots.entryCount() < BTREE_ORDER)
     {
       leaf.header()->slots.insertCell(LeafCell(V));
       return;
     }
 
-    auto newNode = leaf.header()->split(pager);
-    assert(newNode.header()->slots.entryCount() < BTREE_ORDER && "Newly split node should have empty slots");
+    PageId newNodePageId = 0;
+    auto newNode = leaf.header()->split(pager, &newNodePageId);
+    assert(newNode.header()->slots.entryCount() < BTREE_ORDER &&
+           "Newly split node should have empty slots");
+    assert(leaf.header()->slots.entryCount() < BTREE_ORDER &&
+           "Newly split node should have empty slots");
 
-    newNode.header()->slots.insertCell(LeafCell(V));
+    // the new node now contains the low half, so use the lowest value in the new node as the key
+    // for it in the parent
+    const auto lowestValueCell = reinterpret_cast<const LeafCell<T> *>(
+        leaf.header()->slots.getSlotAndCell(static_cast<SlotNum>(0), nullptr));
+
+    if (!leaf.header()->isRoot())
+    {
+      auto parent = pager.getPage<BTreeHeader>(leaf.header()->parent);
+      assert(parent.header()->common.type == PageType::Interior &&
+             "Leaf node's parent must be interior node");
+      auto keyForNewNode = reinterpret_cast<InteriorCell<T> *>(
+          parent.header()->slots.createNextSlotWithCell(sizeof(*lowestValueCell), nullptr));
+      keyForNewNode->cell = NodeCell(lowestValueCell->getPayload());
+      keyForNewNode->leftChild = newNodePageId;
+      newNode.header()->slots.insertCell(LeafCell(V));
+    }
+
+    // move the middle item to the parent node
+    // here, that is the last item of the original node
   }
 };
 

@@ -200,7 +200,7 @@ TEST(BTree, SearchGetLeaf)
    * [2]-->[3,4]
    * Search for 3
    */
-  InteriorNode root;
+  InteriorNode root = {};
   InteriorCell top = InteriorCell(static_cast<u32>(3));
   const PageId rootId = 1;
   const PageId leftId = 2;
@@ -277,7 +277,11 @@ TEST(BTree, SplitNode)
 
   auto &n2 = n1.page.header()->split(pager);
 
-  // current node should have 1,2 and 3,4 marked free
+  // current node takes the upper half (3, 4)
+  // the new node takes the lower half (1,2)
+  // this is so that inserting can reuse the original node's parent link
+  // and have the new value inserted
+
   EXPECT_EQ(2, n1.page.header()->slots.entryCount());
   {
     auto it1 = n1.page.header()->slots.begin();
@@ -285,20 +289,20 @@ TEST(BTree, SplitNode)
       Slot &s = *it1;
       InteriorCell ic = *reinterpret_cast<const InteriorCell<u32> *>(
           n1.page.header()->slots.readCell(s.cellOffset));
-      EXPECT_EQ(1, ic.cell.getPayload());
+      EXPECT_EQ(3, ic.cell.getPayload());
     }
     ++it1;
     {
       Slot &s = *it1;
       InteriorCell ic = *reinterpret_cast<const InteriorCell<u32> *>(
           n1.page.header()->slots.readCell(s.cellOffset));
-      EXPECT_EQ(2, ic.cell.getPayload());
+      EXPECT_EQ(4, ic.cell.getPayload());
     }
     ++it1;
     EXPECT_EQ(n1.page.header()->slots.end(), it1);
   }
 
-  // new node should have 3,4
+  // the new node's values
   EXPECT_EQ(2, n2.header()->slots.entryCount());
   {
     auto it2 = n2.header()->slots.begin();
@@ -306,14 +310,14 @@ TEST(BTree, SplitNode)
       Slot &s = *it2;
       const InteriorCell<u32> *ic =
           reinterpret_cast<const InteriorCell<u32> *>(n2.header()->slots.readCell(s.cellOffset));
-      EXPECT_EQ(3, ic->cell.getPayload());
+      EXPECT_EQ(1, ic->cell.getPayload());
     }
     ++it2;
     {
       Slot &s = *it2;
       InteriorCell ic =
           *reinterpret_cast<const InteriorCell<u32> *>(n2.header()->slots.readCell(s.cellOffset));
-      EXPECT_EQ(4, ic.cell.getPayload());
+      EXPECT_EQ(2, ic.cell.getPayload());
     }
     ++it2;
     EXPECT_EQ(n2.header()->slots.end(), it2);
