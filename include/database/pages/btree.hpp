@@ -79,10 +79,8 @@ template <std::size_t bufsize> struct SlotHeader
     deleteSlot(&s);
   }
 
-  // add data to a new cell and create its slot in the sorted position
-  // this creates a new cell in the page and assigns a slot to it.
-  // the slot will be in its sorted position and may reuse a free slot if one is present
-  // returns the slot the cell was inserted into
+  // copy the cell into the slot buffer and create its slot in the sorted position
+  // returns the slot that points to the cell in the slot buffer
   template <typename Cell>
   Slot *insertCell(const Cell &cell,
                    std::function<bool(const Cell &a, const Cell &b)> comparator = std::less<Cell>{},
@@ -124,8 +122,9 @@ template <std::size_t bufsize> struct SlotHeader
     return s;
   }
 
-  template <typename P> Slot *insertCell(const InteriorCell<P> &cell, u16 *retSlotNumber = nullptr);
-  template <typename P> Slot *insertCell(const LeafCell<P> &cell, u16 *retSlotNumber = nullptr);
+  // template <typename P> Slot *insertCell(const InteriorCell<P> &cell, u16 *retSlotNumber =
+  // nullptr); template <typename P> Slot *insertCell(const LeafCell<P> &cell, u16 *retSlotNumber =
+  // nullptr);
 
   // create a cell of size cellSize from the free space
   u16 allocNextCell(u16 cellSize)
@@ -318,7 +317,7 @@ template <typename T> struct NodeCell
     // read the structure of the cell from the slot
     const std::byte *pCell = sh.readCell(s.cellOffset);
     payloadSize = *reinterpret_cast<const u32 *>(pCell);
-    // TODO overflow. this might be fine, as NodeCell is just a wrapper around what goes into the
+    // TODO: overflow. this might be fine, as NodeCell is just a wrapper around what goes into the
     // slots
     payload = *reinterpret_cast<const CellPayload *>(pCell + sizeof(payloadSize));
     // if we want to read the entire payload, this is where we could follow `payload.overflow`
@@ -342,6 +341,22 @@ template <typename T> struct NodeCell
 
     return sizeof(payloadSize) + payloadSize;
   }
+
+  friend bool operator<(const NodeCell<T> &a, const NodeCell<T> &b)
+  {
+    // TODO: optimise payload comparisons
+    return a.getPayload() < b.getPayload();
+  }
+
+  friend bool operator<(const NodeCell<T> &a, const InteriorCell<T> &b)
+  {
+    if (b.isEnd())
+    {
+      return true;
+    }
+    // TODO: optimise payload comparisons
+    return a.getPayload() < b.cell.getPayload();
+  }
 };
 
 static_assert(sizeof(CellPayload::large) == MAX_CELL_PAYLOAD,
@@ -354,7 +369,7 @@ template <typename T> struct InteriorCell
   PageId leftChild = 0;
   NodeCell<T> cell;
 
-  explicit InteriorCell(T data) : cell(data) {}
+  explicit InteriorCell(const T &data) : cell(data) {}
 
   bool isEnd() const noexcept { return cell.payloadSize == 0; }
 
@@ -364,6 +379,30 @@ template <typename T> struct InteriorCell
     c.leftChild = 0;
     c.cell.payloadSize = 0;
     return c;
+  }
+
+  friend bool operator<(const InteriorCell<T> &a, const InteriorCell<T> &b)
+  {
+    if (a.isEnd())
+    {
+      return false;
+    }
+    if (b.isEnd())
+    {
+      return true;
+    }
+    // TODO: optimise payload comparisons
+    return a.cell.getPayload() < b.cell.getPayload();
+  }
+
+  friend bool operator<(const InteriorCell<T> &a, const NodeCell<T> &b)
+  {
+    if (a.isEnd())
+    {
+      return false;
+    }
+    // TODO: optimise payload comparisons
+    return a.cell.getPayload() < b.getPayload();
   }
 };
 
@@ -379,10 +418,28 @@ struct BTreeHeader
   /* split the node in half, starting from `start`, copying slots to new cell and deleting from
    * original */
   Page<BTreeHeader> &split(Pager &pager, PageId *retPageId = nullptr);
+
+  template <typename T> T getLowestPayload()
+  {
+    assert(slots.entryCount() > 0 && "Getting lowest payload requires at least 1 entry");
+    const auto p = slots.getSlotAndCell(static_cast<SlotNum>(0), nullptr);
+    switch (common.type)
+    {
+    case PageType::Interior:
+      return reinterpret_cast<const InteriorCell<T> *>(p)->cell.getPayload();
+      break;
+    case PageType::Leaf:
+      return reinterpret_cast<const LeafCell<T> *>(p)->getPayload();
+      break;
+    default:
+      throw "Page type must Interior or Leaf";
+    }
+  }
 };
 static_assert(offsetof(BTreeHeader, common) == 0, "Common header must be at offset 0");
 static_assert(offsetof(BTreeHeader, slots) == (sizeof(BTreeHeader) - sizeof(BTreeHeader::slots)),
               "SlotHeader must be the last member");
+
 /* we determine the btree order from the max cell size. this will need to be determined presumably
  * through benchmarking. Since the payload of the cells is not known, here we are allowing a 32 byte
  * payload. MAX_CELL_SIZE is the maximum total cell size (i.e. payload size + the payload itself)
@@ -396,7 +453,7 @@ static_assert(BTREE_ORDER > 0, "BTree order must be at least 1");
 
 struct InteriorNode
 {
-  Page<BTreeHeader> page = Page<BTreeHeader>(Interior);
+  Page<BTreeHeader> &page;
 
   /* find the leaf node a cell value would be located in.
    * following the leaf linked list is not needed to find the existence of the value */
@@ -441,63 +498,26 @@ struct InteriorNode
 
     return currentPage;
   }
-
-  template <typename T> void insert(Pager &pager, const T &V)
-  {
-    Page<BTreeHeader> &leaf = searchGetLeaf(pager, V);
-    // BTREE_ORDER is the maximum number of entries in the node, including the end cell
-    // leaf nodes do not have an end cell
-    if (leaf.header()->slots.entryCount() < BTREE_ORDER)
-    {
-      leaf.header()->slots.insertCell(LeafCell(V));
-      return;
-    }
-
-    PageId newNodePageId = 0;
-    auto newNode = leaf.header()->split(pager, &newNodePageId);
-    assert(newNode.header()->slots.entryCount() < BTREE_ORDER &&
-           "Newly split node should have empty slots");
-    assert(leaf.header()->slots.entryCount() < BTREE_ORDER &&
-           "Newly split node should have empty slots");
-
-    // the new node now contains the low half, so use the lowest value in the new node as the key
-    // for it in the parent
-    const auto lowestValueCell = reinterpret_cast<const LeafCell<T> *>(
-        leaf.header()->slots.getSlotAndCell(static_cast<SlotNum>(0), nullptr));
-
-    if (!leaf.header()->isRoot())
-    {
-      auto parent = pager.getPage<BTreeHeader>(leaf.header()->parent);
-      assert(parent.header()->common.type == PageType::Interior &&
-             "Leaf node's parent must be interior node");
-      auto keyForNewNode = reinterpret_cast<InteriorCell<T> *>(
-          parent.header()->slots.createNextSlotWithCell(sizeof(*lowestValueCell), nullptr));
-      keyForNewNode->cell = NodeCell(lowestValueCell->getPayload());
-      keyForNewNode->leftChild = newNodePageId;
-      newNode.header()->slots.insertCell(LeafCell(V));
-    }
-
-    // move the middle item to the parent node
-    // here, that is the last item of the original node
-  }
 };
 
 struct LeafNode
 {
-  Page<BTreeHeader> page;
+  Page<BTreeHeader> &page;
 
   struct Reserved
   {
     PageId sibling;
   };
 
-  LeafNode() : page(PageType::Leaf)
-  {
-    BTreeHeader *header = page.header();
-    header->slots.freeLength -= sizeof(Reserved);
+  explicit LeafNode(Page<BTreeHeader> &existingPage) : page(existingPage) {};
 
-    setSibling(0);
-  }
+  // LeafNode() : page(Page<BTreeHeader>())
+  // {
+  //   BTreeHeader *header = page.header();
+  //   header->slots.freeLength -= sizeof(Reserved);
+
+  //   setSibling(0);
+  // }
 
   PageId getSibling()
   {
@@ -538,43 +558,6 @@ private:
   }
 };
 
-template <std::size_t BS>
-template <typename P>
-Slot *SlotHeader<BS>::insertCell(const InteriorCell<P> &cell, u16 *retSlotNumber)
-{
-  // TODO: can we use the operator< for InteriorCell instead?
-  // since they both have to be the same payload type
-  const auto interiorComp = std::function(
-      [](const InteriorCell<P> &a, const InteriorCell<P> &b)
-      {
-        // end slots always go at the end
-        // a < b == true
-        if (a.isEnd())
-        {
-          return false;
-        }
-        if (b.isEnd())
-        {
-          return true;
-        }
-        return a.cell.getPayload() < b.cell.getPayload();
-      });
-
-  return insertCell(cell, interiorComp, retSlotNumber);
-}
-
-template <std::size_t BS>
-template <typename P>
-Slot *SlotHeader<BS>::insertCell(const LeafCell<P> &cell, u16 *retSlotNumber)
-{
-  // TODO: can we use the operator< for LeafCell instead?
-  // since they both have to be the same payload type
-  const auto leafComp = std::function([](const LeafCell<P> &a, const LeafCell<P> &b)
-                                      { return a.getPayload() < b.getPayload(); });
-
-  return insertCell(cell, leafComp, retSlotNumber);
-}
-
 template <typename T> void printTree(Pager &pager, Page<BTreeHeader> &root, u32 depth = 0)
 {
   switch (root.header()->common.type)
@@ -614,5 +597,114 @@ template <typename T> void printTree(Pager &pager, Page<BTreeHeader> &root, u32 
   if (depth == 0)
   {
     std::cout << std::endl;
+  }
+}
+
+template <typename T> InteriorCell<T> createKeyForNewNode(PageId pageId) {}
+
+template <typename K> void interiorInsert(Pager &pager, Page<BTreeHeader> &node, const K &key)
+{
+  assert(node.header()->common.type == PageType::Interior &&
+         "Interior insert can only be used on interior nodes");
+
+  if (node.header()->slots.entryCount() < BTREE_ORDER)
+  {
+    node.header()->slots.insertCell(key);
+    return;
+  }
+
+  PageId newNodePageId = 0;
+  auto newNode = node.header()->split(pager, &newNodePageId);
+  assert(newNode.header()->slots.entryCount() < BTREE_ORDER &&
+         "New node from splits hould have empty slots");
+  assert(node.header()->slots.entryCount() < BTREE_ORDER &&
+         "Original node after split should have empty slots");
+  assert(node.header()->common.type == newNode.header()->common.type &&
+         "Original and new node must have same type");
+  // since the original node holds the higher half, the lowest cell is the median between the two
+  const K medianPayload = node.header()->getLowestPayload<K>();
+  auto keyForNewNode = InteriorCell(medianPayload);
+  keyForNewNode.leftChild = newNodePageId;
+
+  // interior nodes move their middle value up when splitting
+  node.header()->slots.deleteSlot(static_cast<SlotNum>(0));
+
+  auto &nodeToInsertInto = node;
+  if (key < medianPayload)
+  {
+    nodeToInsertInto = newNode;
+  }
+  nodeToInsertInto.header()->slots.insertCell(key);
+
+  // the node has been split. add the key that points to the node into the parent
+  auto &parent = pager.getPage<BTreeHeader>(node.header()->parent);
+  assert(parent.header()->common.type == PageType::Interior &&
+         "Interior node parent mus t also be interior node");
+  interiorInsert(pager, parent, keyForNewNode);
+}
+
+template <typename K, typename V>
+void leafInsert(Pager &pager, Page<BTreeHeader> &node, const K &key, const V &value)
+{
+  if (node.header()->slots.entryCount() < BTREE_ORDER)
+  {
+    node.header()->slots.insertCell(value);
+    return;
+  }
+
+  PageId newNodePageId = 0;
+  auto newNode = node.header()->split(pager, &newNodePageId);
+  // TODO: set sibling
+  assert(newNode.header()->slots.entryCount() < BTREE_ORDER &&
+         "New node from splits hould have empty slots");
+  assert(node.header()->slots.entryCount() < BTREE_ORDER &&
+         "Original node after split should have empty slots");
+
+  // create a key for the new node using the median key
+  // HACK: we don't exactly have the key part of this leaf value
+  // so we assume the key is always the first attribute in the payload
+  const V medianKey = node.header()->getLowestPayload<K>();
+  auto keyForNewNode = InteriorCell(medianKey);
+  keyForNewNode.leftChild = newNodePageId;
+
+  // determine if we need to insert into the old or new node
+  auto &nodeToInsertInto = node;
+  if (key < medianKey)
+  {
+    nodeToInsertInto = newNode;
+  }
+  assert(node.header()->common.type == newNode.header()->common.type &&
+         "Original and new node must have same type");
+  nodeToInsertInto.header()->slots.insertCell(value);
+
+  auto &parent = pager.getPage<BTreeHeader>(node.header()->parent);
+  if (node.header()->isRoot())
+  {
+    // create a parent
+    PageId parentId {};
+    parent = pager.fromNextFree<BTreeHeader>(PageType::Interior, &parentId);
+    node.header()->parent = newNode.header()->parent = parentId;
+    // we don't need to touch the types of `node` or `newNode`. If the root
+    // was a leaf, it still is. If it was internal, it still is.
+  }
+  else
+  {
+    assert(parent.header()->common.type == PageType::Interior &&
+           "Parent of leaf node must be an interior node");
+  }
+
+  interiorInsert(pager, parent, keyForNewNode);
+}
+
+template <typename K, typename V>
+void insertIntoNode(Pager &pager, Page<BTreeHeader> &node, const K &key, const V &value)
+{
+  if (node.header()->common.type == PageType::Leaf)
+  {
+    leafInsert(pager, node, key, value);
+  }
+  else
+  {
+    interiorInsert(pager, node, key);
   }
 }

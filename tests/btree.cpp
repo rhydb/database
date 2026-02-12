@@ -200,11 +200,23 @@ TEST(BTree, SearchGetLeaf)
    * [2]-->[3,4]
    * Search for 3
    */
-  InteriorNode root = {};
+  std::stringstream mockStream;
+  Pager pager(mockStream);
+
+  PageId rootId{};
+  auto &rootPage = pager.fromNextFree<BTreeHeader>(PageType::Interior, &rootId);
+  InteriorNode root{rootPage};
   InteriorCell top = InteriorCell(static_cast<u32>(3));
-  const PageId rootId = 1;
-  const PageId leftId = 2;
-  const PageId rightId = 3;
+
+  // create the leaf nodes
+  PageId leftId{};
+  auto &leftPage = pager.fromNextFree<BTreeHeader>(PageType::Leaf, &leftId);
+  LeafNode left = LeafNode(leftPage);
+  PageId rightId{};
+  auto &rightPage = pager.fromNextFree<BTreeHeader>(PageType::Leaf, &rightId);
+  LeafNode right{rightPage};
+
+  // point the top node keys to the leaf nodes
   top.leftChild = leftId;
   InteriorCell topEnd = InteriorCell<u32>::End();
   topEnd.leftChild = rightId;
@@ -212,23 +224,15 @@ TEST(BTree, SearchGetLeaf)
   root.page.header()->slots.insertCell(top);
   root.page.header()->slots.insertCell(topEnd);
 
-  LeafNode left = LeafNode();
   left.page.header()->parent = rootId;
   left.page.header()->slots.insertCell(LeafCell(static_cast<u32>(2)));
-  left.setSibling(rightId);
-  LeafNode right = LeafNode();
+  // left.setSibling(rightId);
   right.page.header()->parent = rootId;
   right.page.header()->slots.insertCell(LeafCell(static_cast<u32>(3)));
   right.page.header()->slots.insertCell(LeafCell(static_cast<u32>(4)));
 
-  std::stringstream mockStream;
-  Pager pager(mockStream);
-  pager.setPage(rootId, root.page.as_ref<CommonHeader>());
-  pager.setPage(leftId, left.page.as_ref<CommonHeader>());
-  pager.setPage(rightId, right.page.as_ref<CommonHeader>());
-
-  // search for 4, should return the `right` leaf node. It will not point directly to 4, or confirm
-  // that 4 exists
+  // search for 4, should return the `right` leaf node.
+  // It will not point directly to 4, or confirm that 4 exists
   Page<BTreeHeader> &res = root.searchGetLeaf(pager, static_cast<u32>(4));
   ASSERT_TRUE(res.header()->isLeaf());
   EXPECT_EQ(rootId, res.header()->parent);
@@ -249,7 +253,9 @@ TEST(BTree, SearchGetLeaf)
 
 TEST(BTree, SearchInLeafGetSlot)
 {
-  LeafNode l = LeafNode();
+  std::stringstream mockStream;
+  Pager pager(mockStream);
+  LeafNode l{pager.fromNextFree<BTreeHeader>(PageType::Leaf)};
   l.page.header()->slots.insertCell(LeafCell(static_cast<u32>(3)));
   l.page.header()->slots.insertCell(LeafCell(static_cast<u32>(4)));
 
@@ -264,16 +270,16 @@ TEST(BTree, SearchInLeafGetSlot)
 
 TEST(BTree, SplitNode)
 {
-  InteriorNode n1;
+  std::stringstream mockStream;
+  Pager pager(mockStream);
+  PageId pageId{};
+  InteriorNode n1{pager.fromNextFree<BTreeHeader>(PageType::Interior, &pageId)};
   n1.page.header()->slots.insertCell(InteriorCell(static_cast<u32>(1)));
   n1.page.header()->slots.insertCell(InteriorCell(static_cast<u32>(2)));
   n1.page.header()->slots.insertCell(InteriorCell(static_cast<u32>(3)));
   n1.page.header()->slots.insertCell(InteriorCell(static_cast<u32>(4)));
 
-  std::stringstream mockStream;
-  Pager pager(mockStream);
-  pager.setPage(1, n1.page.as_ref<CommonHeader>());
-  pager.flushPage(1, n1.page.as_ref<CommonHeader>()); // write it to disk now
+  pager.flushPage(pageId, n1.page.as_ref<CommonHeader>()); // write it to disk now
 
   auto &n2 = n1.page.header()->split(pager);
 
@@ -324,34 +330,21 @@ TEST(BTree, SplitNode)
   }
 }
 
-TEST(BTree, InsertIntoRoot)
-{
-  // InteriorNode root;
-  // std::stringstream mockStream;
-  // Pager pager(mockStream);
-  // pager.setPage(1, root.page.as_ref<CommonHeader>());
-  // root.insert(pager, static_cast<u32>(123));
-}
-
 /* test that adding the maximum size cell fills up the btree node */
 TEST(BTree, NodeCanFit_BTREE_ORDER_Cells)
 {
-  Page <BTreeHeader> node;
+  Page<BTreeHeader> node;
 
   struct MaxCell
   {
     std::size_t i;
     std::array<std::byte, MAX_CELL_SIZE - sizeof(i)> data;
-    MaxCell(std::size_t i) : i(i)
-    {
-      data.fill(static_cast<std::byte>(0));
-    }
+    MaxCell(std::size_t i) : i(i) { data.fill(static_cast<std::byte>(0)); }
   };
-  static_assert(sizeof(MaxCell) == MAX_CELL_SIZE, "sizeof(MaxCell) struct should be the maximum cell size");
+  static_assert(sizeof(MaxCell) == MAX_CELL_SIZE,
+                "sizeof(MaxCell) struct should be the maximum cell size");
 
-  auto comparitor =
-    std::function([](const MaxCell &a, const MaxCell &b)
-    { return a.i < b.i; });
+  auto comparitor = std::function([](const MaxCell &a, const MaxCell &b) { return a.i < b.i; });
   for (std::size_t i{0}; i < BTREE_ORDER; ++i)
   {
     node.header()->slots.insertCell(MaxCell(i), comparitor);
@@ -361,12 +354,52 @@ TEST(BTree, NodeCanFit_BTREE_ORDER_Cells)
   std::size_t numSlots{0};
   for (const auto &slot : node.header()->slots)
   {
-    auto cell =
-      reinterpret_cast<MaxCell *>(node.header()->slots.getCell(slot.cellOffset));
+    auto cell = reinterpret_cast<MaxCell *>(node.header()->slots.getCell(slot.cellOffset));
     EXPECT_EQ(numSlots, cell->i);
     ++numSlots;
   }
   EXPECT_EQ(BTREE_ORDER, numSlots);
   // there should not be enough space to fit another cell+slot
   EXPECT_GT(MAX_CELL_SIZE + sizeof(Slot), node.header()->slots.freeLength);
+}
+
+TEST(BTree, LeafNodeFromExistingPage)
+{
+  Page<BTreeHeader> p1(PageType::Interior);
+  LeafNode leaf(p1);
+  EXPECT_EQ(leaf.page.header()->common.type, p1.header()->common.type);
+
+  p1.header()->common.type = PageType::Leaf;
+
+  EXPECT_EQ(leaf.page.header()->common.type, p1.header()->common.type);
+}
+
+TEST(BTree, SplitRoot)
+{
+
+  std::stringstream mockStream;
+  Pager pager(mockStream);
+  LeafNode root(pager.fromNextFree<BTreeHeader>(PageType::Leaf));
+
+  ASSERT_TRUE(root.page.header()->isRoot());
+  ASSERT_TRUE(root.page.header()->isLeaf());
+  ASSERT_EQ(0, root.page.header()->slots.entryCount());
+
+  for (std::size_t i{}; i < BTREE_ORDER; ++i)
+  {
+    insertIntoNode(pager, root.page, static_cast<u32>(123), static_cast<u32>(123));
+  }
+
+  EXPECT_TRUE(root.page.header()->isRoot());
+  EXPECT_TRUE(root.page.header()->isLeaf());
+  EXPECT_EQ(BTREE_ORDER, root.page.header()->slots.entryCount());
+
+  // next insert will cause a split
+  insertIntoNode(pager, root.page, static_cast<u32>(123), static_cast<u32>(123));
+  ASSERT_FALSE(root.page.header()->isRoot());
+  ASSERT_TRUE(root.page.header()->isLeaf());
+
+  const auto &newRoot = pager.getPage<BTreeHeader>(root.page.header()->parent);
+  EXPECT_TRUE(newRoot.header()->isRoot());
+  EXPECT_TRUE(root.page.header()->isLeaf());
 }

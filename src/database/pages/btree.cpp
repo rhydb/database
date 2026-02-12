@@ -6,9 +6,8 @@ Page<BTreeHeader> &BTreeHeader::split(Pager &pager, PageId *retPageId)
   const auto K = slots.entryCount(); // BTREE_ORDER;
   const decltype(K) half = (K / 2) + (K & 1);
 
-  Page<BTreeHeader> &newPage = pager.nextFree<BTreeHeader>(retPageId);
+  Page<BTreeHeader> &newPage = pager.fromNextFree<BTreeHeader>(this->common.type, retPageId);
   newPage.header()->parent = this->parent;
-  newPage.header()->common.type = this->common.type;
 
   // move the bottom half of this node to the new node
   for (u16 i{0}; i < half; ++i)

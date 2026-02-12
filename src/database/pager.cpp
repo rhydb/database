@@ -57,7 +57,7 @@ void Pager::setPage(PageId pageNum, const Page<> &page) noexcept
   m_pages[pageNum] = page;
 }
 
-PageId Pager::nextFree()
+PageId Pager::nextFree(PageType type)
 {
   // check the firstPage for the free list, otherwise append to file
   Page<FirstPage::Header> &firstPage = m_pages[0].as_ref<FirstPage::Header>();
@@ -87,7 +87,7 @@ PageId Pager::nextFree()
   }
   m_fSize = m_stream.tellp();
   PageId nextId = m_fSize / PAGE_SIZE;
-  Page<CommonHeader> newPage;
+  Page<CommonHeader> newPage(type);
   setPage(nextId, newPage);
   flushPage(nextId, newPage); // write it to disk now
   m_fSize += PAGE_SIZE; // the file size has increased
@@ -103,7 +103,7 @@ void Pager::freePage(PageId pageNum)
   // update the linked list
   page.header()->next = firstPage.header()->db.freelist;
   firstPage.header()->db.freelist = pageNum;
-  // TODO do we need to flush these now?
+  // TODO: do we need to flush these now?
   // flushPage(pageNum, page);
   // flushPage(0, firstPage);
 }

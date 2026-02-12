@@ -28,7 +28,12 @@ template <typename Header = CommonHeader> struct Page
     *h = Header();
 
     // setup the common header
-    CommonHeader *ch = reinterpret_cast<CommonHeader *>(h);
+    setType(type);
+  }
+
+  inline void setType(PageType type)
+  {
+    CommonHeader *ch = reinterpret_cast<CommonHeader *>(header());
     ch->type = type;
   }
 
@@ -49,6 +54,7 @@ template <typename Header = CommonHeader> struct Page
   }
 
   Header *header() noexcept { return reinterpret_cast<Header *>(buf.data()); }
+  const Header *header() const noexcept { return reinterpret_cast<const Header *>(buf.data()); }
 };
 
 // the freelist pages are kept as a linked list with the head stored in the `DatabaseHeader`
@@ -141,7 +147,22 @@ public:
     }
   }
 
-  [[nodiscard]] PageId nextFree();
+  /* Get the next free page and intiialise its header to H */
+  template <typename H>
+  [[nodiscard]] Page<H>& fromNextFree(PageType type = Leaf, PageId * retPageId = nullptr)
+  {
+    const auto pageId = nextFree(type);
+    auto &page = getPage<H>(pageId);
+    // construct the header defaults
+    *page.header() = H();
+    // page type is not part of header defaults
+    page.setType(type);
+    if (retPageId != nullptr)
+      *retPageId = pageId;
+    return page;
+  }
+
+  [[nodiscard]] PageId nextFree(PageType type = PageType::Leaf);
   template <typename H>
   Page<H> &nextFree(PageId *retPageId = nullptr)
   {
