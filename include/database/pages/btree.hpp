@@ -628,7 +628,7 @@ void insertByMedianKey(const T &value, const K &medianKey, Page<BTreeHeader> &lo
 }
 
 template <typename K>
-void interiorInsert(Pager &pager, Page<BTreeHeader> &node, const InteriorCell<K> &cell)
+void interiorInsert(Pager &pager, PageId nodeId, Page<BTreeHeader> &node, const InteriorCell<K> &cell)
 {
   assert(node.header()->common.type == PageType::Interior &&
          "Interior insert can only be used on interior nodes");
@@ -640,18 +640,12 @@ void interiorInsert(Pager &pager, Page<BTreeHeader> &node, const InteriorCell<K>
   }
 
   // interior nodes move their middle value up when splitting
-  auto [newNode, keyForNewNode] = splitAndInsert<K>(pager, node, cell, true);
-
-  // the node has been split. add the key that points to the node into the parent
-  auto &parent = pager.getPage<BTreeHeader>(node.header()->parent);
-  assert(parent.header()->common.type == PageType::Interior &&
-         "Interior node parent mus t also be interior node");
-  interiorInsert<K>(pager, parent, keyForNewNode);
+  splitAndInsert<K>(pager, nodeId, node, cell, true);
 }
 
 template <typename K, typename V>
 std::pair<Page<BTreeHeader> &, InteriorCell<K>>
-splitAndInsert(Pager &pager, Page<BTreeHeader> &nodeToSplit, const V &valueToInsert,
+splitAndInsert(Pager &pager, PageId nodeToSplitId, Page<BTreeHeader> &nodeToSplit, const V &valueToInsert,
                bool keyShouldReplaceValue)
 {
   PageId newNodePageId = 0;
@@ -672,15 +666,44 @@ splitAndInsert(Pager &pager, Page<BTreeHeader> &nodeToSplit, const V &valueToIns
 
   if (keyShouldReplaceValue)
   {
+    // insert an end cell in the new node to point to where the moved cell pointed to
+    InteriorCell<K> endCell = InteriorCell<K>::End();
+    {
+	const auto medianCell = reinterpret_cast<InteriorCell<K> *>(nodeToSplit.header()->slots.getSlotAndCell(0, nullptr));
+	endCell.leftChild = medianCell->leftChild;
+    }
     nodeToSplit.header()->slots.deleteSlot(static_cast<SlotNum>(0));
+    newNode.header()->slots.insertCell(endCell);
   }
 
   insertByMedianKey(valueToInsert, medianKey, newNode, nodeToSplit);
+
+  Page<BTreeHeader> *parent = nullptr;
+  if (!nodeToSplit.header()->isRoot())
+  {
+    parent = &pager.getPage<BTreeHeader>(nodeToSplit.header()->parent);
+  }
+  else
+  {
+    // create a parent
+    PageId parentId{};
+    parent = &pager.fromNextFree<BTreeHeader>(PageType::Interior, &parentId);
+    nodeToSplit.header()->parent = newNode.header()->parent = parentId;
+    // link the end node to the original node
+    InteriorCell<K> endCell = InteriorCell<K>::End();
+    endCell.leftChild = nodeToSplitId;
+    parent->header()->slots.insertCell(endCell);
+    // we don't need to touch the types of `node` or `newNode`. If the root
+    // was a leaf, it still is. If it was internal, it still is.
+  }
+
+  assert(!nodeToSplit.header()->isRoot() && "Node cannot be root after splitting");
+  interiorInsert<K>(pager, nodeToSplit.header()->parent, *parent, keyForNewNode);
   return std::make_pair(std::ref(newNode), keyForNewNode);
 }
 
 template <typename K, typename V>
-void leafInsert(Pager &pager, Page<BTreeHeader> &node, const V &value)
+void leafInsert(Pager &pager, PageId nodeId, Page<BTreeHeader> &node, const V &value)
 {
   if (node.header()->slots.entryCount() < BTREE_ORDER)
   {
@@ -688,24 +711,10 @@ void leafInsert(Pager &pager, Page<BTreeHeader> &node, const V &value)
     return;
   }
 
-  auto [newNode, keyForNewNode] = splitAndInsert<K>(pager, node, value, false);
-  // TODO: set sibling
-
-  auto *parent = &pager.getPage<BTreeHeader>(node.header()->parent);
-  if (node.header()->isRoot())
-  {
-    // create a parent
-    PageId parentId{};
-    parent = &pager.fromNextFree<BTreeHeader>(PageType::Interior, &parentId);
-    node.header()->parent = newNode.header()->parent = parentId;
-    // we don't need to touch the types of `node` or `newNode`. If the root
-    // was a leaf, it still is. If it was internal, it still is.
-  }
-  else
-  {
-    assert(parent->header()->common.type == PageType::Interior &&
-           "Parent of leaf node must be an interior node");
-  }
-
-  interiorInsert<K>(pager, *parent, keyForNewNode);
+  // leaf nodes must maintain the linked list between them
+  auto [newNode, keyForNewNode] = splitAndInsert<K>(pager, nodeId, node, value, false);
+  LeafNode newLeaf {newNode};
+  // TODO: set sibling double linked list
+  // the left sibling of node still points to node, it should point to the new node
+  newLeaf.setSibling(nodeId);
 }

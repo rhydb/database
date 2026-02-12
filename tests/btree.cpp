@@ -402,7 +402,8 @@ TEST(BTree, SplitRoot)
 
   std::stringstream mockStream;
   Pager pager(mockStream);
-  LeafNode root(pager.fromNextFree<BTreeHeader>(PageType::Leaf));
+  PageId rootId{};
+  LeafNode root(pager.fromNextFree<BTreeHeader>(PageType::Leaf, &rootId));
 
   ASSERT_TRUE(root.page.header()->isRoot());
   ASSERT_TRUE(root.page.header()->isLeaf());
@@ -410,7 +411,7 @@ TEST(BTree, SplitRoot)
 
   for (std::size_t i{}; i < BTREE_ORDER; ++i)
   {
-    leafInsert<u32>(pager, root.page, static_cast<u32>(123));
+    leafInsert<u32>(pager, rootId, root.page, static_cast<u32>(123));
   }
 
   EXPECT_TRUE(root.page.header()->isRoot());
@@ -418,11 +419,13 @@ TEST(BTree, SplitRoot)
   EXPECT_EQ(BTREE_ORDER, root.page.header()->slots.entryCount());
 
   // next insert will cause a split
-  leafInsert<u32>(pager, root.page, static_cast<u32>(123));
+  leafInsert<u32>(pager, rootId, root.page, static_cast<u32>(123));
   ASSERT_FALSE(root.page.header()->isRoot());
   ASSERT_TRUE(root.page.header()->isLeaf());
 
   const auto &newRoot = pager.getPage<BTreeHeader>(root.page.header()->parent);
   EXPECT_TRUE(newRoot.header()->isRoot());
   EXPECT_FALSE(newRoot.header()->isLeaf());
+
+  EXPECT_EQ(2, newRoot.header()->slots.entryCount());
 }
