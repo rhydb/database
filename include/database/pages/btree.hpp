@@ -381,6 +381,15 @@ template <typename T> struct InteriorCell
     return c;
   }
 
+  friend bool operator<(const InteriorCell<T> &a, const T &b)
+  {
+    if (a.isEnd())
+    {
+      return false;
+    }
+    // TODO: optimise payload comparisons
+    return a.cell.getPayload() < b;
+  }
   friend bool operator<(const InteriorCell<T> &a, const InteriorCell<T> &b)
   {
     if (a.isEnd())
@@ -602,49 +611,76 @@ template <typename T> void printTree(Pager &pager, Page<BTreeHeader> &root, u32 
 
 template <typename T> InteriorCell<T> createKeyForNewNode(PageId pageId) {}
 
-template <typename K> void interiorInsert(Pager &pager, Page<BTreeHeader> &node, const K &key)
+/* after splitting a node, insert a value based on the median of the two. It would be assumed that
+ * `median` is the first value in `higher` */
+template <typename T, typename K>
+void insertByMedianKey(const T &value, const K &medianKey, Page<BTreeHeader> &lower,
+                       Page<BTreeHeader> &higher)
+{
+  if (value < medianKey)
+  {
+    lower.header()->slots.insertCell(value);
+  }
+  else
+  {
+    higher.header()->slots.insertCell(value);
+  }
+}
+
+template <typename K>
+void interiorInsert(Pager &pager, Page<BTreeHeader> &node, const InteriorCell<K> &cell)
 {
   assert(node.header()->common.type == PageType::Interior &&
          "Interior insert can only be used on interior nodes");
 
   if (node.header()->slots.entryCount() < BTREE_ORDER)
   {
-    node.header()->slots.insertCell(key);
+    node.header()->slots.insertCell(cell);
     return;
   }
 
-  PageId newNodePageId = 0;
-  auto newNode = node.header()->split(pager, &newNodePageId);
-  assert(newNode.header()->slots.entryCount() < BTREE_ORDER &&
-         "New node from splits hould have empty slots");
-  assert(node.header()->slots.entryCount() < BTREE_ORDER &&
-         "Original node after split should have empty slots");
-  assert(node.header()->common.type == newNode.header()->common.type &&
-         "Original and new node must have same type");
-  // since the original node holds the higher half, the lowest cell is the median between the two
-  const K medianPayload = node.header()->getLowestPayload<K>();
-  auto keyForNewNode = InteriorCell(medianPayload);
-  keyForNewNode.leftChild = newNodePageId;
-
   // interior nodes move their middle value up when splitting
-  node.header()->slots.deleteSlot(static_cast<SlotNum>(0));
-
-  auto &nodeToInsertInto = node;
-  if (key < medianPayload)
-  {
-    nodeToInsertInto = newNode;
-  }
-  nodeToInsertInto.header()->slots.insertCell(key);
+  auto [newNode, keyForNewNode] = splitAndInsert<K>(pager, node, cell, true);
 
   // the node has been split. add the key that points to the node into the parent
   auto &parent = pager.getPage<BTreeHeader>(node.header()->parent);
   assert(parent.header()->common.type == PageType::Interior &&
          "Interior node parent mus t also be interior node");
-  interiorInsert(pager, parent, keyForNewNode);
+  interiorInsert<K>(pager, parent, keyForNewNode);
 }
 
 template <typename K, typename V>
-void leafInsert(Pager &pager, Page<BTreeHeader> &node, const K &key, const V &value)
+std::pair<Page<BTreeHeader> &, InteriorCell<K>>
+splitAndInsert(Pager &pager, Page<BTreeHeader> &nodeToSplit, const V &valueToInsert,
+               bool keyShouldReplaceValue)
+{
+  PageId newNodePageId = 0;
+  auto &newNode = nodeToSplit.header()->split(pager, &newNodePageId);
+  assert(newNode.header()->slots.entryCount() < BTREE_ORDER &&
+         "New node from splits hould have empty slots");
+  assert(nodeToSplit.header()->slots.entryCount() < BTREE_ORDER &&
+         "Original node after split should have empty slots");
+  assert(nodeToSplit.header()->common.type == newNode.header()->common.type &&
+         "Original and new node must have same type");
+
+  // create a key for the new node using the median key
+  // HACK: we assume the key is always the first attribute in the payload
+
+  const K medianKey = nodeToSplit.header()->getLowestPayload<K>();
+  auto keyForNewNode = InteriorCell(medianKey);
+  keyForNewNode.leftChild = newNodePageId;
+
+  if (keyShouldReplaceValue)
+  {
+    nodeToSplit.header()->slots.deleteSlot(static_cast<SlotNum>(0));
+  }
+
+  insertByMedianKey(valueToInsert, medianKey, newNode, nodeToSplit);
+  return std::make_pair(std::ref(newNode), keyForNewNode);
+}
+
+template <typename K, typename V>
+void leafInsert(Pager &pager, Page<BTreeHeader> &node, const V &value)
 {
   if (node.header()->slots.entryCount() < BTREE_ORDER)
   {
@@ -652,30 +688,8 @@ void leafInsert(Pager &pager, Page<BTreeHeader> &node, const K &key, const V &va
     return;
   }
 
-  PageId newNodePageId = 0;
-  auto newNode = node.header()->split(pager, &newNodePageId);
+  auto [newNode, keyForNewNode] = splitAndInsert<K>(pager, node, value, false);
   // TODO: set sibling
-  assert(newNode.header()->slots.entryCount() < BTREE_ORDER &&
-         "New node from splits hould have empty slots");
-  assert(node.header()->slots.entryCount() < BTREE_ORDER &&
-         "Original node after split should have empty slots");
-
-  // create a key for the new node using the median key
-  // HACK: we don't exactly have the key part of this leaf value
-  // so we assume the key is always the first attribute in the payload
-  const V medianKey = node.header()->getLowestPayload<K>();
-  auto keyForNewNode = InteriorCell(medianKey);
-  keyForNewNode.leftChild = newNodePageId;
-
-  // determine if we need to insert into the old or new node
-  auto &nodeToInsertInto = node;
-  if (key < medianKey)
-  {
-    nodeToInsertInto = newNode;
-  }
-  assert(node.header()->common.type == newNode.header()->common.type &&
-         "Original and new node must have same type");
-  nodeToInsertInto.header()->slots.insertCell(value);
 
   auto &parent = pager.getPage<BTreeHeader>(node.header()->parent);
   if (node.header()->isRoot())
@@ -693,18 +707,5 @@ void leafInsert(Pager &pager, Page<BTreeHeader> &node, const K &key, const V &va
            "Parent of leaf node must be an interior node");
   }
 
-  interiorInsert(pager, parent, keyForNewNode);
-}
-
-template <typename K, typename V>
-void insertIntoNode(Pager &pager, Page<BTreeHeader> &node, const K &key, const V &value)
-{
-  if (node.header()->common.type == PageType::Leaf)
-  {
-    leafInsert(pager, node, key, value);
-  }
-  else
-  {
-    interiorInsert(pager, node, key);
-  }
+  interiorInsert<K>(pager, parent, keyForNewNode);
 }

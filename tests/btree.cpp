@@ -410,7 +410,7 @@ TEST(BTree, SplitRoot)
 
   for (std::size_t i{}; i < BTREE_ORDER; ++i)
   {
-    insertIntoNode(pager, root.page, static_cast<u32>(123), static_cast<u32>(123));
+    leafInsert<u32>(pager, root.page, static_cast<u32>(123));
   }
 
   EXPECT_TRUE(root.page.header()->isRoot());
@@ -418,7 +418,7 @@ TEST(BTree, SplitRoot)
   EXPECT_EQ(BTREE_ORDER, root.page.header()->slots.entryCount());
 
   // next insert will cause a split
-  insertIntoNode(pager, root.page, static_cast<u32>(123), static_cast<u32>(123));
+  leafInsert<u32>(pager, root.page, static_cast<u32>(123));
   ASSERT_FALSE(root.page.header()->isRoot());
   ASSERT_TRUE(root.page.header()->isLeaf());
 
