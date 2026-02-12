@@ -462,23 +462,23 @@ struct InteriorNode
     // find the node to follow down
     // TODO: maybe a binary search here to find the node
 
-    Page<BTreeHeader> &currentPage = this->page;
+    Page<BTreeHeader> *currentPage = &this->page;
 
-    while (!currentPage.header()->isLeaf())
+    while (!currentPage->header()->isLeaf())
     {
-      for (const Slot &s : currentPage.header()->slots)
+      for (const Slot &s : currentPage->header()->slots)
       {
         // get the interior cell for this slot
         assert(s.cellSize == sizeof(InteriorCell<V>) &&
                "Interior search cell should be size of Interior");
-        const InteriorCell interior =
-            *reinterpret_cast<InteriorCell<V> *>(currentPage.header()->slots.getCell(s.cellOffset));
+        const InteriorCell interior = *reinterpret_cast<InteriorCell<V> *>(
+            currentPage->header()->slots.getCell(s.cellOffset));
         assert(interior.leftChild != 0 &&
                "Non leaf node cannot have leaf cell. Tree must be unbalanced");
         if (interior.isEnd())
         {
           // end cell of this node, follow it down
-          currentPage = pager.getPage<BTreeHeader>(interior.leftChild);
+          currentPage = &pager.getPage<BTreeHeader>(interior.leftChild);
           break;
         }
 
@@ -490,13 +490,13 @@ struct InteriorNode
         if (Q < value)
         {
           // follow the slot to the next node
-          currentPage = pager.getPage<BTreeHeader>(interior.leftChild);
+          currentPage = &pager.getPage<BTreeHeader>(interior.leftChild);
           break;
         }
       }
     }
 
-    return currentPage;
+    return *currentPage;
   }
 };
 
@@ -681,7 +681,7 @@ void leafInsert(Pager &pager, Page<BTreeHeader> &node, const K &key, const V &va
   if (node.header()->isRoot())
   {
     // create a parent
-    PageId parentId {};
+    PageId parentId{};
     parent = pager.fromNextFree<BTreeHeader>(PageType::Interior, &parentId);
     node.header()->parent = newNode.header()->parent = parentId;
     // we don't need to touch the types of `node` or `newNode`. If the root

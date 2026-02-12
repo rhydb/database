@@ -226,29 +226,52 @@ TEST(BTree, SearchGetLeaf)
 
   left.page.header()->parent = rootId;
   left.page.header()->slots.insertCell(LeafCell(static_cast<u32>(2)));
-  // left.setSibling(rightId);
+  left.setSibling(rightId);
   right.page.header()->parent = rootId;
   right.page.header()->slots.insertCell(LeafCell(static_cast<u32>(3)));
   right.page.header()->slots.insertCell(LeafCell(static_cast<u32>(4)));
 
-  // search for 4, should return the `right` leaf node.
-  // It will not point directly to 4, or confirm that 4 exists
-  Page<BTreeHeader> &res = root.searchGetLeaf(pager, static_cast<u32>(4));
-  ASSERT_TRUE(res.header()->isLeaf());
-  EXPECT_EQ(rootId, res.header()->parent);
+  {
+    // search for 4, should return the `right` leaf node.
+    // It will not point directly to 4, or confirm that 4 exists
+    Page<BTreeHeader> &res = root.searchGetLeaf(pager, static_cast<u32>(4));
+    ASSERT_TRUE(res.header()->isLeaf());
+    EXPECT_EQ(rootId, res.header()->parent);
 
-  // make sure its the right leaf node and the cells are in the correct order
-  auto it = res.header()->slots.begin();
-  Slot s1 = *it;
-  NodeCell c1 = NodeCell<u32>(res.header()->slots, s1);
-  // 3 comes first
-  EXPECT_EQ(sizeof(u32), c1.payloadSize);
-  EXPECT_EQ(3, c1.getPayload());
-  ++it;
-  Slot s2 = *it;
-  NodeCell c2 = NodeCell<u32>(res.header()->slots, s2);
-  EXPECT_EQ(sizeof(u32), c2.payloadSize);
-  EXPECT_EQ(4, c2.getPayload());
+    // make sure its the right leaf node and the cells are in the correct order
+    auto it = res.header()->slots.begin();
+    Slot s1 = *it;
+    NodeCell c1 = NodeCell<u32>(res.header()->slots, s1);
+    // 3 comes first
+    EXPECT_EQ(sizeof(u32), c1.payloadSize);
+    EXPECT_EQ(3, c1.getPayload());
+    ++it;
+    Slot s2 = *it;
+    NodeCell c2 = NodeCell<u32>(res.header()->slots, s2);
+    EXPECT_EQ(sizeof(u32), c2.payloadSize);
+    EXPECT_EQ(4, c2.getPayload());
+  }
+
+  {
+    // search for 2, should return the `left` leaf node.
+    Page<BTreeHeader> &res = root.searchGetLeaf(pager, static_cast<u32>(2));
+    ASSERT_TRUE(res.header()->isLeaf());
+    EXPECT_EQ(rootId, res.header()->parent);
+
+    // make sure its the left leaf node and the cells are in the correct order
+    auto it = res.header()->slots.begin();
+    Slot s1 = *it;
+    NodeCell c1 = NodeCell<u32>(res.header()->slots, s1);
+    EXPECT_EQ(sizeof(u32), c1.payloadSize);
+    EXPECT_EQ(2, c1.getPayload());
+    ++it;
+    // no more cells
+    EXPECT_EQ(res.header()->slots.end(), it);
+
+    // check the sibling link is there still
+    LeafNode leafRes {res};
+    EXPECT_EQ(rightId, leafRes.getSibling());
+  }
 }
 
 TEST(BTree, SearchInLeafGetSlot)
