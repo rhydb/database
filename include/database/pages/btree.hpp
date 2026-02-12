@@ -691,21 +691,21 @@ void leafInsert(Pager &pager, Page<BTreeHeader> &node, const V &value)
   auto [newNode, keyForNewNode] = splitAndInsert<K>(pager, node, value, false);
   // TODO: set sibling
 
-  auto &parent = pager.getPage<BTreeHeader>(node.header()->parent);
+  auto *parent = &pager.getPage<BTreeHeader>(node.header()->parent);
   if (node.header()->isRoot())
   {
     // create a parent
     PageId parentId{};
-    parent = pager.fromNextFree<BTreeHeader>(PageType::Interior, &parentId);
+    parent = &pager.fromNextFree<BTreeHeader>(PageType::Interior, &parentId);
     node.header()->parent = newNode.header()->parent = parentId;
     // we don't need to touch the types of `node` or `newNode`. If the root
     // was a leaf, it still is. If it was internal, it still is.
   }
   else
   {
-    assert(parent.header()->common.type == PageType::Interior &&
+    assert(parent->header()->common.type == PageType::Interior &&
            "Parent of leaf node must be an interior node");
   }
 
-  interiorInsert<K>(pager, parent, keyForNewNode);
+  interiorInsert<K>(pager, *parent, keyForNewNode);
 }

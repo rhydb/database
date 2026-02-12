@@ -424,5 +424,5 @@ TEST(BTree, SplitRoot)
 
   const auto &newRoot = pager.getPage<BTreeHeader>(root.page.header()->parent);
   EXPECT_TRUE(newRoot.header()->isRoot());
-  EXPECT_TRUE(root.page.header()->isLeaf());
+  EXPECT_FALSE(newRoot.header()->isLeaf());
 }
