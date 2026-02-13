@@ -234,7 +234,7 @@ TEST(BTree, SearchGetLeaf)
   {
     // search for 4, should return the `right` leaf node.
     // It will not point directly to 4, or confirm that 4 exists
-    Page<BTreeHeader> &res = root.searchGetLeaf(pager, static_cast<u32>(4));
+    const Page<BTreeHeader> &res = root.searchGetLeaf(pager, static_cast<u32>(4));
     ASSERT_TRUE(res.header()->isLeaf());
     EXPECT_EQ(rootId, res.header()->parent);
 

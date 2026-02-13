@@ -9,6 +9,7 @@
 #include <span>
 #include <functional>
 #include <optional>
+#include <type_traits>
 
 // we use the slot numbers in the table b tree for row ids
 // this is used in indexes to then find the row data
@@ -36,9 +37,25 @@ template <typename T> using LeafCell = NodeCell<T>;
 // it does not include the slot header itself or any other data, just slots and cells
 template <std::size_t bufsize> struct SlotHeader
 {
-  struct iterator;
+private:
+  template <bool IsConst> struct iteratorbase;
+
+public:
+  struct iterator : public iteratorbase<false>
+  {
+    explicit iterator(SlotHeader<bufsize> *p) : iteratorbase<false>(p) {}
+    iterator() : iteratorbase<false>() {}
+  };
+  struct const_iterator : public iteratorbase<true>
+  {
+    explicit const_iterator(const SlotHeader<bufsize> *p) : iteratorbase<true>(p) {}
+    const_iterator() : iteratorbase<true>() {}
+  };
+
   iterator begin() { return iterator(this); }
   iterator end() { return iterator(); }
+  const_iterator begin() const { return const_iterator(this); }
+  const_iterator end() const { return const_iterator(); }
 
   u16 freeStart = 0;        // offset from end of header
   u16 freeLength = bufsize; // marked as free if both 0
@@ -47,7 +64,8 @@ template <std::size_t bufsize> struct SlotHeader
   bool isFree() const noexcept { return freeStart == 0 && freeLength == 0; }
   u16 entryCount() const noexcept { return freeStart / sizeof(Slot); }
 
-  bool isSlotOutOfBounds(SlotNum slotNumber) { return slotNumber * sizeof(Slot) > freeStart; }
+  bool isSlotOutOfBounds(SlotNum slotNumber) const noexcept { return slotNumber * sizeof(Slot) > freeStart; }
+
   Slot *getSlot(SlotNum slotNumber)
   {
     if (isSlotOutOfBounds(slotNumber))
@@ -56,6 +74,11 @@ template <std::size_t bufsize> struct SlotHeader
     }
     return reinterpret_cast<Slot *>(buf().data() + slotNumber * sizeof(Slot));
   }
+  const Slot *getSlot(SlotNum slotNumber) const
+  {
+    return const_cast<const Slot *>(const_cast<SlotHeader<bufsize> *>(this)->getSlot(slotNumber));
+  }
+
   // get a slot and its cell using its number
   void *getSlotAndCell(SlotNum slotNumber, Slot *retSlot)
   {
@@ -68,8 +91,6 @@ template <std::size_t bufsize> struct SlotHeader
   }
 
   inline std::byte *getCell(u16 offset) { return buf().data() + offset; }
-
-  // const version of getCell
   inline const std::byte *readCell(u16 offset) const { return buf().data() + offset; }
 
   // delete the slot from the slot array.
@@ -170,7 +191,6 @@ template <std::size_t bufsize> struct SlotHeader
 private:
   // TODO: LeafNodes store their reserved data at the end of the buffer, so the bufsize here is
   // incorrect for them. The memory is valid, but points into the reserved data.
-
   std::span<std::byte> buf() noexcept
   {
     return std::span<std::byte>(reinterpret_cast<std::byte *>(this + 1), bufsize);
@@ -220,13 +240,16 @@ private:
   }
 };
 
-template <std::size_t BS> struct SlotHeader<BS>::iterator
+template <std::size_t BS> template <bool IsConst> struct SlotHeader<BS>::iteratorbase
 {
+  using container_type = std::conditional_t<IsConst, const SlotHeader<BS>, SlotHeader<BS>>;
+  using value_type = std::conditional_t<IsConst, const Slot, Slot>;
+  using container_pointer = container_type *;
   using difference_type = SlotNum;
-  using pointer = Slot *;
-  using reference = Slot &;
+  using pointer = value_type *;
+  using reference = value_type &;
 
-  explicit iterator(SlotHeader *slots) noexcept : m_slots(slots)
+  explicit iteratorbase(container_pointer slots) noexcept : m_slots(slots)
   {
     if (slots == nullptr || slots->isEmpty() || slots->isSlotOutOfBounds(0))
     {
@@ -236,19 +259,19 @@ template <std::size_t BS> struct SlotHeader<BS>::iterator
 
     m_current = slots->getSlot(0);
   }
-  iterator() : m_slots(nullptr), m_isEnd(true), m_current() {}
-  static iterator end() { return iterator(); }
+  iteratorbase() : m_slots(nullptr), m_isEnd(true), m_current() {}
+  static iteratorbase end() { return iteratorbase(); }
 
   reference operator*() noexcept { return *m_current; }
   pointer operator->() noexcept { return m_current; }
-  iterator &operator++() { return (*this) + 1; }
-  iterator operator++(int)
+  iteratorbase &operator++() { return (*this) + 1; }
+  iteratorbase operator++(int)
   {
-    iterator tmp = *this;
+    iteratorbase tmp = *this;
     ++(*this);
     return tmp;
   }
-  iterator &operator+(int n)
+  iteratorbase &operator+(int n)
   {
     if (m_isEnd || m_slots == nullptr)
       return *this;
@@ -265,18 +288,18 @@ template <std::size_t BS> struct SlotHeader<BS>::iterator
 
     return *this;
   }
-  friend bool operator==(const iterator &a, const iterator &b)
+  friend bool operator==(const iteratorbase &a, const iteratorbase &b)
   {
     if (a.m_isEnd && b.m_isEnd)
       return true;
     return a.m_isEnd == b.m_isEnd && a.m_slots == b.m_slots && a.m_current == b.m_current;
   }
-  friend bool operator!=(const iterator &a, const iterator &b) { return !(a == b); }
+  friend bool operator!=(const iteratorbase &a, const iteratorbase &b) { return !(a == b); }
 
 private:
-  SlotHeader *m_slots = nullptr;
+  container_pointer m_slots = nullptr;
   bool m_isEnd = false;
-  Slot *m_current;
+  pointer m_current;
   SlotNum m_currentNum = 0;
 };
 
@@ -628,7 +651,8 @@ void insertByMedianKey(const T &value, const K &medianKey, Page<BTreeHeader> &lo
 }
 
 template <typename K>
-void interiorInsert(Pager &pager, PageId nodeId, Page<BTreeHeader> &node, const InteriorCell<K> &cell)
+void interiorInsert(Pager &pager, PageId nodeId, Page<BTreeHeader> &node,
+                    const InteriorCell<K> &cell)
 {
   assert(node.header()->common.type == PageType::Interior &&
          "Interior insert can only be used on interior nodes");
@@ -645,8 +669,8 @@ void interiorInsert(Pager &pager, PageId nodeId, Page<BTreeHeader> &node, const 
 
 template <typename K, typename V>
 std::pair<Page<BTreeHeader> &, InteriorCell<K>>
-splitAndInsert(Pager &pager, PageId nodeToSplitId, Page<BTreeHeader> &nodeToSplit, const V &valueToInsert,
-               bool keyShouldReplaceValue)
+splitAndInsert(Pager &pager, PageId nodeToSplitId, Page<BTreeHeader> &nodeToSplit,
+               const V &valueToInsert, bool keyShouldReplaceValue)
 {
   PageId newNodePageId = 0;
   auto &newNode = nodeToSplit.header()->split(pager, &newNodePageId);
@@ -669,8 +693,9 @@ splitAndInsert(Pager &pager, PageId nodeToSplitId, Page<BTreeHeader> &nodeToSpli
     // insert an end cell in the new node to point to where the moved cell pointed to
     InteriorCell<K> endCell = InteriorCell<K>::End();
     {
-	const auto medianCell = reinterpret_cast<InteriorCell<K> *>(nodeToSplit.header()->slots.getSlotAndCell(0, nullptr));
-	endCell.leftChild = medianCell->leftChild;
+      const auto medianCell = reinterpret_cast<InteriorCell<K> *>(
+          nodeToSplit.header()->slots.getSlotAndCell(0, nullptr));
+      endCell.leftChild = medianCell->leftChild;
     }
     nodeToSplit.header()->slots.deleteSlot(static_cast<SlotNum>(0));
     newNode.header()->slots.insertCell(endCell);
@@ -713,7 +738,7 @@ void leafInsert(Pager &pager, PageId nodeId, Page<BTreeHeader> &node, const V &v
 
   // leaf nodes must maintain the linked list between them
   auto [newNode, keyForNewNode] = splitAndInsert<K>(pager, nodeId, node, value, false);
-  LeafNode newLeaf {newNode};
+  LeafNode newLeaf{newNode};
   // TODO: set sibling double linked list
   // the left sibling of node still points to node, it should point to the new node
   newLeaf.setSibling(nodeId);
