@@ -402,30 +402,51 @@ TEST(BTree, SplitRoot)
 
   std::stringstream mockStream;
   Pager pager(mockStream);
-  PageId rootId{};
-  LeafNode root(pager.fromNextFree<BTreeHeader>(PageType::Leaf, &rootId));
+  PageId originalRootId{};
+  LeafNode originalRoot(pager.fromNextFree<BTreeHeader>(PageType::Leaf, &originalRootId));
 
-  ASSERT_TRUE(root.page.header()->isRoot());
-  ASSERT_TRUE(root.page.header()->isLeaf());
-  ASSERT_EQ(0, root.page.header()->slots.entryCount());
+  ASSERT_TRUE(originalRoot.page.header()->isRoot());
+  ASSERT_TRUE(originalRoot.page.header()->isLeaf());
+  ASSERT_EQ(0, originalRoot.page.header()->slots.entryCount());
 
   for (std::size_t i{}; i < BTREE_ORDER; ++i)
   {
-    leafInsert<u32>(pager, rootId, root.page, static_cast<u32>(123));
+    leafInsert<u32>(pager, originalRootId, originalRoot.page, static_cast<u32>(123));
   }
 
-  EXPECT_TRUE(root.page.header()->isRoot());
-  EXPECT_TRUE(root.page.header()->isLeaf());
-  EXPECT_EQ(BTREE_ORDER, root.page.header()->slots.entryCount());
+  EXPECT_TRUE(originalRoot.page.header()->isRoot());
+  EXPECT_TRUE(originalRoot.page.header()->isLeaf());
+  EXPECT_EQ(BTREE_ORDER, originalRoot.page.header()->slots.entryCount());
 
   // next insert will cause a split
-  leafInsert<u32>(pager, rootId, root.page, static_cast<u32>(123));
-  ASSERT_FALSE(root.page.header()->isRoot());
-  ASSERT_TRUE(root.page.header()->isLeaf());
+  leafInsert<u32>(pager, originalRootId, originalRoot.page, static_cast<u32>(123));
+  ASSERT_FALSE(originalRoot.page.header()->isRoot());
+  ASSERT_TRUE(originalRoot.page.header()->isLeaf());
 
-  const auto &newRoot = pager.getPage<BTreeHeader>(root.page.header()->parent);
+  const auto &newRoot = pager.getPage<BTreeHeader>(originalRoot.page.header()->parent);
   EXPECT_TRUE(newRoot.header()->isRoot());
   EXPECT_FALSE(newRoot.header()->isLeaf());
 
+  // new root contains the key for the new node and an end node pointing to the original node
   EXPECT_EQ(2, newRoot.header()->slots.entryCount());
+
+  auto rootIt = newRoot.header()->slots.begin();
+  {
+    Slot s1 = *rootIt;
+    InteriorCell c1 = InteriorCell<u32>::fromSlot(newRoot.header()->slots, s1);
+    EXPECT_EQ(123, c1.cell.getPayload());
+    // split should cause the first cell to point to the new node.
+    // we don't know the Id of that though.
+    EXPECT_NE(0, c1.leftChild);
+  }
+
+  ++rootIt;
+  EXPECT_NE(newRoot.header()->slots.end(), rootIt);
+  {
+    Slot s2 = *rootIt;
+    InteriorCell c2 = InteriorCell<u32>::fromSlot(newRoot.header()->slots, s2);
+    EXPECT_TRUE(c2.isEnd());
+    // the split should have made end point to original node
+    EXPECT_EQ(originalRootId, c2.leftChild);
+  }
 }

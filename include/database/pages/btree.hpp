@@ -396,6 +396,26 @@ template <typename T> struct InteriorCell
 
   bool isEnd() const noexcept { return cell.payloadSize == 0; }
 
+  template <std::size_t BS> static InteriorCell fromSlot(const SlotHeader<BS> &sh, const Slot &s)
+  {
+    // read the structure of the cell from the slot
+    const std::byte *pCell = sh.readCell(s.cellOffset);
+    const PageId &leftChild = *reinterpret_cast<const PageId *>(pCell);
+    // read the payload size first to check for an end cell
+    const u32 &payloadSize = *reinterpret_cast<const u32 *>(pCell + sizeof(leftChild));
+    if (payloadSize == 0)
+    {
+      InteriorCell ic = End();
+      ic.leftChild = leftChild;
+      return ic;
+    }
+
+    const NodeCell<T> &cell = *reinterpret_cast<const NodeCell<T> *>(pCell + sizeof(leftChild));
+    InteriorCell ic(cell.getPayload());
+    ic.leftChild = leftChild;
+    return ic;
+  }
+
   static InteriorCell End() noexcept
   {
     InteriorCell c(0);
