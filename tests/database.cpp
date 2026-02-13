@@ -90,7 +90,7 @@ TEST_F(TempFileFixture, Freelist)
 
   // freeing a page marks it as free and sets the linked list
   Page<> &pageA = db.pager.getPage(a);
-  pageA.header()->type = PageType::Root;
+  pageA.header()->type = PageType::Interior;
   db.pager.freePage(a);
   EXPECT_EQ(PageType::Freelist, pageA.header()->type);
   EXPECT_EQ(a, firstPage.header()->db.freelist);
@@ -100,6 +100,9 @@ TEST_F(TempFileFixture, Freelist)
   EXPECT_EQ(1, a);
   EXPECT_EQ(0, firstPage.header()->db.freelist);
   EXPECT_EQ(PAGE_SIZE * 3, db.pager.fsize());
+  const Page<> &freeA = db.pager.getPage(a);
+  EXPECT_EQ(PageType::Freelist, freeA.header()->type);
+
 
   db.pager.freePage(a);
   db.pager.freePage(b);
@@ -113,21 +116,3 @@ TEST_F(TempFileFixture, Freelist)
   EXPECT_EQ(1, a);
   EXPECT_EQ(0, firstPage.header()->db.freelist);
 }
-
-// TEST(Database, InsertSelect) {
-//   Table t = Table("test.db");
-//   Row r = {1, {"username"}, {"email"}};
-//   t.insert(r);
-//
-//   ASSERT_EQ(t.nRows(), 1);
-//
-//   Row r2;
-//
-//   std::stringbuf buf(std::string(t.rowSlot(0), ROW_SIZE), std::ios::in | std::ios::out |
-//   std::ios_base::binary); std::iostream ss(&buf);
-//
-//   r2.deserialise(ss);
-//   std::cout << r2.id << "," << r2.username.data() << "," << r2.email.data() << std::endl;
-//   EXPECT_EQ(r.username, r2.username);
-//   EXPECT_EQ(r.email, r2.email);
-// }

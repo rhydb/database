@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "database/pages/btree.hpp"
+#include "machine.hpp"
 
 /* add slots with cell data and make sure the free start and length pointers are updated */
 TEST(Slots, AddSlotsAndCellsUpdatesFreePointers)
@@ -188,8 +189,8 @@ TEST(Slots, InsertAfterDelete)
 
 TEST(BTree, PageTypes)
 {
-  Page<BTreeHeader> root(PageType::Root);
-  EXPECT_EQ(PageType::Root, root.header()->common.type);
+  Page<BTreeHeader> node(PageType::Interior);
+  EXPECT_EQ(PageType::Interior, node.header()->common.type);
 }
 
 TEST(BTree, SearchGetLeaf)
@@ -399,7 +400,6 @@ TEST(BTree, LeafNodeFromExistingPage)
 
 TEST(BTree, SplitRoot)
 {
-
   std::stringstream mockStream;
   Pager pager(mockStream);
   PageId originalRootId{};
@@ -418,6 +418,10 @@ TEST(BTree, SplitRoot)
   EXPECT_TRUE(originalRoot.page.header()->isLeaf());
   EXPECT_EQ(BTREE_ORDER, originalRoot.page.header()->slots.entryCount());
 
+  std::stringstream tree{};
+  printTree<u32>(tree, pager, originalRoot.page);
+  ASSERT_STREQ("[123 123 123 123 123 123 ] ", tree.str().c_str());
+
   // next insert will cause a split
   leafInsert<u32>(pager, originalRootId, originalRoot.page, static_cast<u32>(123));
   ASSERT_FALSE(originalRoot.page.header()->isRoot());
@@ -429,6 +433,7 @@ TEST(BTree, SplitRoot)
 
   // new root contains the key for the new node and an end node pointing to the original node
   EXPECT_EQ(2, newRoot.header()->slots.entryCount());
+
 
   auto rootIt = newRoot.header()->slots.begin();
   {
@@ -449,4 +454,9 @@ TEST(BTree, SplitRoot)
     // the split should have made end point to original node
     EXPECT_EQ(originalRootId, c2.leftChild);
   }
+
+  tree.seekp(0);
+  tree.seekg(0);
+  printTree<u32>(tree, pager, newRoot);
+  ASSERT_STREQ("(123 [123 123 123 ] END [123 123 123 123 ] )", tree.str().c_str());
 }

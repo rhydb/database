@@ -91,6 +91,7 @@ public:
   }
 
   inline std::byte *getCell(u16 offset) { return buf().data() + offset; }
+  inline const std::byte *getCell(u16 offset) const { return buf().data() + offset; }
   inline const std::byte *readCell(u16 offset) const { return buf().data() + offset; }
 
   // delete the slot from the slot array.
@@ -365,6 +366,12 @@ template <typename T> struct NodeCell
     return sizeof(payloadSize) + payloadSize;
   }
 
+  friend bool operator<(const LeafCell<T> &a, const T &b)
+  {
+    // TODO: optimise payload comparisons
+    return a.getPayload() < b;
+  }
+
   friend bool operator<(const NodeCell<T> &a, const NodeCell<T> &b)
   {
     // TODO: optimise payload comparisons
@@ -610,45 +617,40 @@ private:
   }
 };
 
-template <typename T> void printTree(Pager &pager, Page<BTreeHeader> &root, u32 depth = 0)
+template <typename T> void printTree(std::stringstream &stream, Pager &pager, const Page<BTreeHeader> &root, u32 depth = 0)
 {
   switch (root.header()->common.type)
   {
   case PageType::Interior:
-    std::cout << '(';
+    stream << '(';
     for (const auto &slot : root.header()->slots)
     {
-      auto cell =
-          reinterpret_cast<InteriorCell<T> *>(root.header()->slots.getCell(slot.cellOffset));
+      const auto cell =
+          reinterpret_cast<const InteriorCell<T> *>(root.header()->slots.getCell(slot.cellOffset));
       if (cell->isEnd())
       {
-        std::cout << "END" << ' ';
+        stream << "END" << ' ';
       }
       else
       {
-        std::cout << cell->cell.getPayload() << ' ';
+        stream << cell->cell.getPayload() << ' ';
       }
       Page<BTreeHeader> &child = pager.getPage<BTreeHeader>(cell->leftChild);
-      printTree<T>(pager, child, depth + 1);
+      printTree<T>(stream, pager, child, depth + 1);
     }
-    std::cout << ')';
+    stream << ')';
     break;
   case PageType::Leaf:
-    std::cout << '[';
+    stream << '[';
     for (const auto &slot : root.header()->slots)
     {
-      auto cell = reinterpret_cast<LeafCell<T> *>(root.header()->slots.getCell(slot.cellOffset));
-      std::cout << cell->getPayload() << ' ';
+      const auto cell = reinterpret_cast<const LeafCell<T> *>(root.header()->slots.getCell(slot.cellOffset));
+      stream << cell->getPayload() << ' ';
     }
-    std::cout << ']' << ' ';
+    stream << ']' << ' ';
     break;
   default:
-    std::cout << '?' << root.header()->common.type << '?';
-  }
-
-  if (depth == 0)
-  {
-    std::cout << std::endl;
+    stream << '?' << root.header()->common.type << '?';
   }
 }
 
@@ -703,7 +705,7 @@ splitAndInsert(Pager &pager, PageId nodeToSplitId, Page<BTreeHeader> &nodeToSpli
 
   // create a key for the new node using the median key
   // HACK: we assume the key is always the first attribute in the payload
-
+  // TODO: optimise getting payload for LeafNode
   const K medianKey = nodeToSplit.header()->getLowestPayload<K>();
   auto keyForNewNode = InteriorCell(medianKey);
   keyForNewNode.leftChild = newNodePageId;
@@ -752,12 +754,12 @@ void leafInsert(Pager &pager, PageId nodeId, Page<BTreeHeader> &node, const V &v
 {
   if (node.header()->slots.entryCount() < BTREE_ORDER)
   {
-    node.header()->slots.insertCell(value);
+    node.header()->slots.insertCell(LeafCell<V>(value));
     return;
   }
 
   // leaf nodes must maintain the linked list between them
-  auto [newNode, keyForNewNode] = splitAndInsert<K>(pager, nodeId, node, value, false);
+  auto [newNode, keyForNewNode] = splitAndInsert<K>(pager, nodeId, node, LeafCell<V>(value), false);
   LeafNode newLeaf{newNode};
   // TODO: set sibling double linked list
   // the left sibling of node still points to node, it should point to the new node

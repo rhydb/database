@@ -14,9 +14,8 @@ struct DatabaseHeader
 
 enum PageType
 {
-  Root = 0,
-  Interior,
   Leaf,
+  Interior,
   Freelist,
   First,
   Overflow,
